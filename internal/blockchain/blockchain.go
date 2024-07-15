@@ -2,76 +2,138 @@ package blockchain
 
 import (
 	"math/big"
-	"time"
 
+
+	"github.com/terium-project/terium/internal"
 	"github.com/terium-project/terium/internal/block"
-	"github.com/terium-project/terium/internal/transaction"
+	"github.com/terium-project/terium/internal/blockStore"
+
 	. "github.com/terium-project/terium/internal/transaction"
 )
 
-const (
-	Version int32 = 0x01
-	NBits 	uint8 = 0x40
-)
 
-var (
-	Target big.Int = *(&big.Int{}).Lsh(big.NewInt(1), uint(NBits))
-)
+type BlockchainWriter struct {
+	ctx 		*internal.DirCtx
+}
+
+func (writer BlockchainWriter) New(ctx *internal.DirCtx) {
+	writer.ctx = ctx
+}
+
+func (writer BlockchainWriter) AddBlock(block *block.Block, lastHash []byte) {
+	
+
+	lastIO := blockStore.IndexIO{}
+	lastIO.New(writer.ctx, lastHash)
+	lastIO.Read()
+	currHeight := lastIO.MetaData().Height
+	
+	sum := big.Int{}
+	sum.Add(&currHeight, big.NewInt(1))
+	
+	metadata := blockStore.BlockMetaData{
+		Hash: block.Hash(),
+		Height: sum,
+		Nonce: block.Header.Nonce,
+	}
+	blockStore := &blockStore.BlockStore{}
+	blockStore.New(writer.ctx, metadata.Hash)
+	blockStore.Write(block, &metadata)
+	blockStore.Close()
+	
+	lastIO.New(writer.ctx, metadata.Hash)
+	lastIO.WriteLastHash()
+	lastIO.Close()
+	
+}
+
+
+
+func (writer BlockchainWriter) DeleteBlock(hash []byte) {
+	blockStore := &blockStore.BlockStore{}
+	blockStore.New(writer.ctx, hash)
+	blockStore.Delete()
+	blockStore.Close()
+}
+
+
+type BlockchainIterator struct {
+	ctx *internal.DirCtx
+	block *block.Block
+	store *blockStore.BlockStore
+	metadata *blockStore.BlockMetaData
+}
+
+
+func (iter BlockchainIterator) New(ctx *internal.DirCtx) {
+	indexIO := blockStore.IndexIO{}
+	indexIO.New(ctx, nil)
+	indexIO.ReadLastHash()
+	store := blockStore.BlockStore{}
+	meta := indexIO.MetaData()
+	store.New(ctx, meta.Hash)
+	store.Read()
+	iter.ctx = ctx
+	iter.metadata = meta
+	iter.block = store.Block()
+	iter.store = &store
+}
+
+func (iter BlockchainIterator) Next() {
+	iter.store.New(iter.ctx, iter.block.Header.PrevHash)
+	iter.store.Read()
+	iter.metadata = iter.store.Metadata()
+	iter.block = iter.store.Block()
+}
+
+func (iter BlockchainIterator) Close() {
+	iter.store.Close()
+}
+
+func (iter BlockchainIterator) Block() *block.Block {
+	return iter.block
+}
+
+func (iter BlockchainIterator) Metadata() *blockStore.BlockMetaData {
+	return iter.metadata
+}
+
+
 
 type Blockchain struct {
-	LastHash	[]byte
-	NewBlock *block.Block
-	BlockHeight	big.Int
+	writer *BlockchainWriter
+	ctx *internal.DirCtx
+	lastHash []byte
 }
 
-func (b Blockchain) Genesis() {
-	genesis := block.Block{
-		Header: block.Header{
-			Version: Version,
-			PrevHash: []byte{},
-			TimeStamp: uint32(time.Now().Unix()),
-			Target: Target,
-		},
-		TXCount: 0,
-		Transactions: nil,
-	}
-	genesis.Save()
-	b.LastHash = genesis.Hash()
-	b.BlockHeight = *big.NewInt(0)
+func (blockchain Blockchain) New(ctx *internal.DirCtx) {
+	blockchain.ctx = ctx
+	
+	blockchain.writer = &BlockchainWriter{}
+	blockchain.writer.New(ctx)
+
+	reader := &BlockchainIterator{}
+	reader.New(ctx)
+
+	blockchain.lastHash = reader.metadata.Hash
 }
 
-func (b Blockchain) CreateBlock( 
-	CoinBaseScriptSz CompactSize, 
-	CoinBaseSript [][]byte,
-	nOut uint8, 
-	outputs TxOuts, 
-) {
-	coinbaseTx := CoinbaseTx(uint32(Version), CoinBaseScriptSz, CoinBaseSript, nOut, outputs)
-	header := block.Header{
-		Version: Version,
-		PrevHash: b.LastHash,
-		Target: Target,
-	}
-	b.NewBlock = &block.Block{
-		Header: header,
-		TXCount: 1,
-		Transactions: []transaction.Tx{coinbaseTx},
-	}
+func (blockchain Blockchain) AddBlock(block *block.Block) {
+	blockchain.writer.AddBlock(block, blockchain.lastHash)
+	blockchain.lastHash = block.Hash()
 }
 
-func (b Blockchain) AddBlock(block block.Block) {
-	b.NewBlock = &block
-	b.LastHash = block.Hash()
-	sum := big.Int{}
-	sum.Add(&b.BlockHeight, big.NewInt(1))
-	b.BlockHeight = sum
-	block.Save()
-	b.UpdateDB()
+func (blockchain Blockchain) Iterator() *BlockchainIterator {
+	iter := BlockchainIterator{}
+	iter.New(blockchain.ctx)
+	return &iter
 }
 
+func (blockchain Blockchain) LastHash() []byte {
+	return blockchain.lastHash
+}
 
-
-func (b Blockchain) FindTxOutByOutPt(tx OutPoint) (TxOut, error) {
+func (blockchain Blockchain) FindTxOutByOutPt(tx OutPoint) (TxOut, error) {
 	var txout TxOut
 
 	return txout, nil

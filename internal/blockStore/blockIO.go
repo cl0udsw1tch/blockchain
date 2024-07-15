@@ -1,6 +1,7 @@
 package blockStore
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"math/big"
 	"os"
@@ -20,26 +21,29 @@ func (c CorruptBlockErr) Error() string {
 type BlockMetaData struct {
 	Hash []byte
 	Nonce uint32
+	Height big.Int
 }
 
+
 type BlockIO struct {
-	dirs *internal.DirCtx
+	ctx *internal.DirCtx
 	block *block.Block
 	bytes []byte
 	sum []byte
-	metadata *BlockMetaData
+	hash []byte
 	path string
-	file *os.File
 }
 
-func (b BlockIO) New(meta *BlockMetaData) {
-	b.metadata = meta
-	b.path = path.Join(b.dirs.DataDir, string(b.metadata.Hash))
-	b.dirs = &internal.T_DirCtx
+func (b *BlockIO) New(ctx *internal.DirCtx, hash []byte) {
+	b.ctx = ctx
+	b.hash = hash
+	b.path = path.Join(b.ctx.DataDir, string(b.hash))
+	b.ctx = &internal.T_DirCtx
 }
 
-func (b BlockIO) Write(block *block.Block) error {
-	b.block = block
+func (b *BlockIO) Write(block *block.Block) error {
+
+
 
 	f, err := os.OpenFile(b.path, os.O_CREATE | os.O_RDWR, 0644)
 
@@ -57,7 +61,7 @@ func (b BlockIO) Write(block *block.Block) error {
 	return nil
 }
 
-func (b BlockIO) Read(hash []byte) error {
+func (b *BlockIO) Read() error {
 
 	_bytes, err := os.ReadFile(b.path)
 	if err != nil {
@@ -72,15 +76,21 @@ func (b BlockIO) Read(hash []byte) error {
 		return CorruptBlockErr{}
 	}
 
+	blockDecoder := block.BlockDecoder{}
+	buffer := bytes.Buffer{}
+	buffer.Write(b.bytes)
+	blockDecoder.New(b.block)
+	blockDecoder.Decode(buffer)
+
 	return nil
 }
 
-func (b BlockIO) Checksum() {
+func (b *BlockIO) Checksum() {
 	sum := sha256.Sum256(b.bytes)
 	b.sum = sum[:]
 }
 
-func (b BlockIO) Check() bool {
+func (b *BlockIO) Check() bool {
 	expected := sha256.Sum256(b.bytes)
 	expectedSum := big.Int{}
 	expectedSum.SetBytes(expected[:])
@@ -92,13 +102,16 @@ func (b BlockIO) Check() bool {
 
 }
 
-func (b BlockIO) Update() error {
-
-	// not sure yet if Update() should be separate from Write()
+func (b *BlockIO) Update(block *block.Block) error {
+	b.Write(block)
 	return nil
 }
 
-func (b BlockIO) Delete() error {
+func (b *BlockIO) Delete() error {
 	os.Remove(b.path)
 	return nil
+}
+
+func (b *BlockIO) Block() *block.Block {
+	return b.block
 }

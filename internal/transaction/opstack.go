@@ -1,4 +1,4 @@
-package script
+package transaction
 
 type OpStack struct {
 	items [][]byte

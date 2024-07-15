@@ -16,10 +16,10 @@ func MakeClients(count int) []ClientId {
 	wg := sync.WaitGroup{};
 	for i := range(count){
 		wg.Add(1)
-		go func () {
+		go func (i int) {
 			defer wg.Done()
 			clients[i] = MakeClient()
-		}()
+		}(i)
 	}
 	wg.Wait()
 	return clients

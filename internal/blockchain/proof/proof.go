@@ -1,11 +1,9 @@
 package proof
 
 import (
-	"encoding/binary"
-	"math"
 	"math/big"
-
 	"github.com/terium-project/terium/internal/block"
+	"github.com/terium-project/terium/internal/t_error"
 )
 
 type NoNonceError struct {}
@@ -32,7 +30,7 @@ func NewPoW(block *block.Block) PoW {
 	return PoW{block: block, notifier: make(chan PoWState)}
 }
 
-func (pow PoW) Solve() error {
+func (pow PoW) Solve() {
 
 	var hash big.Int
 	state := PoWState{Nonce: 0, Solved: false}
@@ -46,13 +44,13 @@ func (pow PoW) Solve() error {
 		if pow.verifyHash(hash) {
 			state.Solved = true
 			pow.notifier <- state
-			return nil
+			return
 		}
 		pow.notifier <- state
 		state.Nonce++
 	}
-
-	return NoNonceError{}
+	
+	t_error.LogErr(NoNonceError{})
 }
 
 func (pow PoW) Validate() bool {

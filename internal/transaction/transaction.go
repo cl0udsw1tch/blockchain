@@ -20,15 +20,16 @@ func (pt OutPoint) Copy() OutPoint {
 }
 
 const (
-	COMPACT_SZ1 int = 0x01
-	COMPACT_SZ2 int = 0x02
-	COMPACT_SZ3 int = 0x03
+	COMPACT_SZ1 byte = 0x01
+	COMPACT_SZ2 byte = 0x02
+	COMPACT_SZ3 byte = 0x03
 )
 
 type CompactSize struct {
 	Type byte
 	Size []byte
 }
+
 
 type TxOut struct {
 	Value             int64

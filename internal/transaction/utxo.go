@@ -1,15 +1,14 @@
-package utxo
+package transaction
 
 import (
-	"github.com/terium-project/terium/internal/transaction"
 )
 
 type Utxo struct {
 	TXID              [32]byte
-	TXPoint           transaction.OutPoint
+	TXPoint           OutPoint
 	Value             int64
-	LockingScriptSize int8
-	LockingScript     []byte
+	LockingScriptSize CompactSize
+	LockingScript     [][]byte
 }
 
 func (utxo *Utxo) getUtxo() (*Utxo, error) {

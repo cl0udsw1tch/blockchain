@@ -32,13 +32,13 @@ func (a *ClientId) MakeClientId() {
 func (a *ClientId) MakePrivateKey() ecdsa.PrivateKey {
 	privKey, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 
-	t_error.LogErr(&err)
+	t_error.LogErr(err)
 
 	var buffer bytes.Buffer
 	encoder := gob.NewEncoder(&buffer)
 	err = encoder.Encode(*privKey)
 
-	t_error.LogErr(&err)
+	t_error.LogErr(err)
 
 	privKeyBytes := buffer.Bytes()
 	a.PrivateKey = privKeyBytes
@@ -55,7 +55,7 @@ func (a *ClientId) MakePublicKey(pk *ecdsa.PrivateKey) {
 	encoder := gob.NewEncoder(&buffer)
 	err := encoder.Encode(pubKey)
 
-	t_error.LogErr(&err)
+	t_error.LogErr(err)
 
 	pubKeyBytes := buffer.Bytes()
 	a.PublicKey = pubKeyBytes

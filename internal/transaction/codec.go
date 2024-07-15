@@ -3,8 +3,6 @@ package transaction
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/terium-project/terium/internal/script"
-
 )
 
 const (
@@ -44,18 +42,18 @@ func (e BAD_SCRIPT_ERR) Error() string {
 
 // **** decoder **** //
 type OutPointDecoder struct {
-	pt *transaction.OutPoint 
+	pt *OutPoint 
 }
 
-func (d OutPointDecoder) New(pt *transaction.OutPoint){
+func (d *OutPointDecoder) New(pt *OutPoint){
 	d.pt = pt
 }
 
-func (d OutPointDecoder) Clear() {
+func (d *OutPointDecoder) Clear() {
 	d.pt = nil
 }
 
-func (d OutPointDecoder) Decode(buffer bytes.Buffer) error {
+func (d *OutPointDecoder) Decode(buffer bytes.Buffer) error {
 
 
 	if buffer.Len() != OUTPOINT_TXID_SZ + OUTPOINT_IDX_SZ {
@@ -70,7 +68,7 @@ func (d OutPointDecoder) Decode(buffer bytes.Buffer) error {
 	return nil
 }
 
-func (d OutPointDecoder) Out() *transaction.OutPoint {
+func (d OutPointDecoder) Out() *OutPoint {
 	return d.pt
 }
 
@@ -80,20 +78,20 @@ type OutPointEncoder struct {
 	buffer *bytes.Buffer
 }
 
-func (e OutPointEncoder) New(buffer *bytes.Buffer){
+func (e *OutPointEncoder) New(buffer *bytes.Buffer){
 	e.buffer = buffer
 }
 
-func (e OutPointEncoder) Clear() {
+func (e *OutPointEncoder) Clear() {
 	e.buffer = nil
 }
 
-func (e OutPointEncoder) Encode(o transaction.OutPoint) {
+func (e *OutPointEncoder) Encode(o OutPoint) {
 	binary.Write(e.buffer, binary.BigEndian, o.TxId)
 	binary.Write(e.buffer, binary.BigEndian, o.Idx)
 }
 
-func (e OutPointEncoder) Bytes() []byte {
+func (e *OutPointEncoder) Bytes() []byte {
 	return e.buffer.Bytes()
 }
 
@@ -104,7 +102,7 @@ func (e OutPointEncoder) Bytes() []byte {
 // script codec ========================================= //
 
 type ScriptBase struct {
-	Size transaction.CompactSize
+	Size CompactSize
 	Script [][]byte
 }
 
@@ -114,15 +112,15 @@ type ScriptDecoder struct {
 	script *ScriptBase
 }
 
-func (d ScriptDecoder) New(s *ScriptBase) {
+func (d *ScriptDecoder) New(s *ScriptBase) {
 	d.script = s
 }
 
-func (d ScriptDecoder) Clear() {
+func (d *ScriptDecoder) Clear() {
 	d.script = nil
 }
 
-func (d ScriptDecoder) Decode(buffer bytes.Buffer) error {
+func (d *ScriptDecoder) Decode(buffer bytes.Buffer) error {
 	if buffer.Len() < 1 {
 		return BAD_SCRIPT_ERR{}
 	}
@@ -132,7 +130,7 @@ func (d ScriptDecoder) Decode(buffer bytes.Buffer) error {
 	}
 	szValBytes := buffer.Next(int(len))
 	szVal := binary.BigEndian.Uint32(szValBytes)
-	d.script.Size = transaction.CompactSize{
+	d.script.Size = CompactSize{
 		Type: len,
 		Size: szValBytes,
 	}
@@ -143,14 +141,14 @@ func (d ScriptDecoder) Decode(buffer bytes.Buffer) error {
 	var n uint32 = 0
 	for n < uint32(szVal) {
 		_byte = buffer.Next(1)[0]
-		key := script.OpCode(_byte)
-		if _, ok := script.OpMap[key]; ok {
+		key := OpCode(_byte)
+		if _, ok := OpMap[key]; ok {
 			d.script.Script = append(d.script.Script, []byte{_byte})
 			n += 1
 		} else {
 			switch _byte {
-				case byte(script.OP_PUSHDATA1):
-					d.script.Script = append(d.script.Script, []byte{byte(script.OP_PUSHDATA1)})
+				case byte(OP_PUSHDATA1):
+					d.script.Script = append(d.script.Script, []byte{byte(OP_PUSHDATA1)})
 					if buffer.Len() < 1 {
 						return BAD_SCRIPT_ERR{}
 					}
@@ -162,8 +160,8 @@ func (d ScriptDecoder) Decode(buffer bytes.Buffer) error {
 					d.script.Script = append(d.script.Script, sz_bytes, buffer.Next(int(sz)))
 					n += 1 + 1 + uint32(sz)
 
-				case byte(script.OP_PUSHDATA2):
-					d.script.Script = append(d.script.Script, []byte{byte(script.OP_PUSHDATA2)})
+				case byte(OP_PUSHDATA2):
+					d.script.Script = append(d.script.Script, []byte{byte(OP_PUSHDATA2)})
 					if buffer.Len() < 2 {
 						return BAD_SCRIPT_ERR{}
 					}
@@ -175,8 +173,8 @@ func (d ScriptDecoder) Decode(buffer bytes.Buffer) error {
 					d.script.Script = append(d.script.Script, sz_bytes, buffer.Next(int(sz)))
 					n += 1 + 2 + uint32(sz)
 
-				case byte(script.OP_PUSHDATA4):
-					d.script.Script = append(d.script.Script, []byte{byte(script.OP_PUSHDATA4)})
+				case byte(OP_PUSHDATA4):
+					d.script.Script = append(d.script.Script, []byte{byte(OP_PUSHDATA4)})
 					if buffer.Len() < 4 {
 						return BAD_SCRIPT_ERR{}
 					}
@@ -197,7 +195,7 @@ func (d ScriptDecoder) Decode(buffer bytes.Buffer) error {
 	return nil
 }
 
-func (d ScriptDecoder) Out() *ScriptBase {
+func (d *ScriptDecoder) Out() *ScriptBase {
 	return d.script
 }
 
@@ -237,10 +235,10 @@ func (e ScriptEncoder) Bytes() []byte {
 // **** decoder **** //
 
 type TxOutDecoder struct {
-	txout *transaction.TxOut 
+	txout *TxOut 
 }
 
-func (d TxOutDecoder) New(txout *transaction.TxOut){
+func (d TxOutDecoder) New(txout *TxOut){
 	d.txout = txout
 }
 
@@ -266,7 +264,7 @@ func (d TxOutDecoder) Decode(buffer bytes.Buffer) error {
 	return err	
 }
 
-func (d TxOutDecoder) Out() *transaction.TxOut {
+func (d TxOutDecoder) Out() *TxOut {
 	return d.txout
 }
 
@@ -284,7 +282,7 @@ func (e TxOutEncoder) Clear(){
 		e.buffer = nil
 }
 
-func (e TxOutEncoder) Encode(txOut transaction.TxOut){
+func (e TxOutEncoder) Encode(txOut TxOut){
 
 	binary.Write(e.buffer, binary.BigEndian, txOut.Value)
 
@@ -309,14 +307,14 @@ func (e TxOutEncoder) Bytes() []byte {
 
 // **** decoder **** //
 type TxInDecoder struct {
-	txin *transaction.TxIn
+	txin *TxIn
 }
 
-func (d TxInDecoder) New(txin *transaction.TxIn) {
+func (d *TxInDecoder) New(txin *TxIn) {
 	d.txin = txin
 }
 
-func (d TxInDecoder) Clear(){
+func (d *TxInDecoder) Clear(){
 	d.txin = nil
 }
 
@@ -340,7 +338,7 @@ func (d TxInDecoder) Decode(buffer bytes.Buffer) error {
 	return nil
 }
 
-func (d TxInDecoder) Out() *transaction.TxIn{
+func (d *TxInDecoder) Out() *TxIn{
 	return d.txin
 }
 
@@ -350,26 +348,26 @@ type TxInEncoder struct {
 	buffer *bytes.Buffer
 }
 
-func (e TxInEncoder) New(buffer *bytes.Buffer){
+func (e *TxInEncoder) New(buffer *bytes.Buffer){
 	e.buffer = buffer
 }
 
-func (e TxInEncoder) Clear(){
+func (e *TxInEncoder) Clear(){
 	e.buffer = nil
 }
 
-func (e TxInEncoder) Encode(txin transaction.TxIn){
+func (e *TxInEncoder) Encode(txin TxIn){
 	outPointEncoder := OutPointEncoder{}
 	outPointEncoder.New(e.buffer)
 	outPointEncoder.Encode(txin.PrevOutpt)
 
 	scriptEncoder := ScriptEncoder{}
 	scriptEncoder.New(e.buffer)
-	scriptEncoder.Encode(ScriptBase{Size: transaction.CompactSize{Type: txin.UnlockingScriptSize.Type, Size: txin.UnlockingScriptSize.Size}})
+	scriptEncoder.Encode(ScriptBase{Size: CompactSize{Type: txin.UnlockingScriptSize.Type, Size: txin.UnlockingScriptSize.Size}})
 
 }
 
-func (e TxInEncoder) Bytes() []byte {
+func (e *TxInEncoder) Bytes() []byte {
 	return e.buffer.Bytes()
 }
 
@@ -380,18 +378,18 @@ func (e TxInEncoder) Bytes() []byte {
 // **** decoder **** //
 
 type TxDecoder struct {
-	tx *transaction.Tx
+	tx *Tx
 }
 
-func (d TxDecoder) New(tx *transaction.Tx){
+func (d *TxDecoder) New(tx *Tx){
 	d.tx = tx
 }
 
-func (d TxDecoder) Clear(){
+func (d *TxDecoder) Clear(){
 	d.tx = nil
 }
 
-func (d TxDecoder) Decode(buffer bytes.Buffer) error {
+func (d *TxDecoder) Decode(buffer bytes.Buffer) error {
 	if buffer.Len() < 4 {
 		return BAD_TX_ERR{}
 	}
@@ -434,7 +432,7 @@ func (d TxDecoder) Decode(buffer bytes.Buffer) error {
 	return nil
 }
 
-func (d TxDecoder) Out() *transaction.Tx {
+func (d *TxDecoder) Out() *Tx {
 	return d.tx
 }
 
@@ -444,15 +442,15 @@ type TxEncoder struct {
 	buffer *bytes.Buffer
 }
 
-func (e TxEncoder) New(buffer *bytes.Buffer){
+func (e *TxEncoder) New(buffer *bytes.Buffer){
 	e.buffer = buffer
 }
 
-func (e TxEncoder) Clear(){
+func (e *TxEncoder) Clear(){
 	e.buffer = nil
 }
 
-func (e TxEncoder) Encode(tx transaction.Tx){
+func (e *TxEncoder) Encode(tx Tx){
 	binary.Write(e.buffer, binary.BigEndian, tx.Version)
 	binary.Write(e.buffer, binary.BigEndian, tx.NumInputs)
 	for _, in := range tx.Inputs{
@@ -470,7 +468,7 @@ func (e TxEncoder) Encode(tx transaction.Tx){
 
 }
 
-func (e TxEncoder) Bytes() []byte {
+func (e *TxEncoder) Bytes() []byte {
 	return e.buffer.Bytes()
 }
 

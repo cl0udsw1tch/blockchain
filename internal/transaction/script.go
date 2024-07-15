@@ -1,4 +1,4 @@
-package script
+package transaction
 
 import (
 	"bytes"
@@ -6,10 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/gob"
-
 	"github.com/terium-project/terium/internal/t_util"
-	"github.com/terium-project/terium/internal/transaction"
-	"github.com/terium-project/terium/internal/utxo"
 	"golang.org/x/crypto/ripemd160"
 )
 
@@ -17,11 +14,11 @@ type OpCode byte
 type OpState byte
 type OpFunc func(ctx *OpCtx)
 type OpCtx struct {
-	Tx     transaction.Tx
+	Tx     Tx
 	Stack  OpStack
 	State  OpState
-	TxIn   transaction.TxIn
-	InUtxo utxo.Utxo
+	TxIn   TxIn
+	InUtxo Utxo
 	InIdx  uint8
 }
 
@@ -106,30 +103,28 @@ var (
 		txCopy := ctx.Tx.Copy()
 
 		for _, tx_in := range txCopy.Inputs {
-			tx_in.UnlockingScript = []byte{0x00}
-			tx_in.UnlockingScriptSize = 0
+			tx_in.UnlockingScript = [][]byte{{0x00}}
+			tx_in.UnlockingScriptSize = CompactSize{Type: COMPACT_SZ1, Size: []byte{0x00}}
 		}
-		txCopy.Inputs[ctx.InIdx].UnlockingScriptSize = int8(len(ctx.InUtxo.LockingScript))
+		txCopy.Inputs[ctx.InIdx].UnlockingScriptSize = ctx.InUtxo.LockingScriptSize
 		txCopy.Inputs[ctx.InIdx].UnlockingScript = ctx.InUtxo.LockingScript
 
 		switch SigHashFlag(sigHashFlag & 0b11) {
 		case SIGHASH_ALL:
 			break
 		case SIGHASH_NONE:
-			txCopy.Outputs = []transaction.TxOut{}
-			break
+			txCopy.Outputs = []TxOut{}
 		case SIGHASH_SINGLE:
 			txCopy.Outputs = txCopy.Outputs[:ctx.InIdx+1]
 			for _, tx_out := range txCopy.Outputs[:ctx.InIdx] {
 				tx_out.Value = -1
-				tx_out.LockingScriptSize = 0
-				tx_out.LockingScript = []byte{}
+				tx_out.LockingScriptSize = CompactSize{Type: COMPACT_SZ1, Size: []byte{0x00}}
+				tx_out.LockingScript = [][]byte{}
 			}
-			break
 		}
 
 		if sigHashFlag&uint8(SIGHASH_ANYONECANPAY) != 0 {
-			txCopy.Inputs = []transaction.TxIn{txCopy.Inputs[ctx.InIdx]}
+			txCopy.Inputs = []TxIn{txCopy.Inputs[ctx.InIdx]}
 		}
 
 		var txBuffer bytes.Buffer
@@ -142,7 +137,7 @@ var (
 		var bufferPK bytes.Buffer
 		bufferPK.Write(pubKey)
 		decoder := gob.NewDecoder(&bufferPK)
-		decoder.Decode(pubKeyObj)
+		decoder.Decode(&pubKeyObj)
 
 		valid := ecdsa.VerifyASN1(&pubKeyObj, txBuffer.Bytes(), sig)
 

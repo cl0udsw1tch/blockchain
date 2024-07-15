@@ -16,7 +16,6 @@ type Header struct{
 	Nonce			uint32
 }
 
-
 type Block struct{
 	Header 					Header
 	TXCount					uint32
@@ -55,7 +54,6 @@ func (block Block) MerkelRoot() []byte {
 	return MerkelRoot(bits)
 }
 
-
 func (block Block) Hash() []byte {
 	e := HeaderEncoder{}
 	e.Encode(block.Header)
@@ -68,11 +66,6 @@ func (block Block) Serialize() []byte {
 	return e.Bytes()
 }
 
-func (block Block) Save() error {
-	bytes := block.Serialize()
-
-	return nil
-}
 
 
 
