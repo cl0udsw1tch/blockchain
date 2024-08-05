@@ -5,35 +5,35 @@ import (
 	"encoding/gob"
 	"math/big"
 	"path"
+	"github.com/terium-project/terium/internal/t_config"
 	"github.com/dgraph-io/badger/v4"
-	"github.com/terium-project/terium/internal"
 	"github.com/terium-project/terium/internal/t_error"
 )
 
 type __metadata__ struct {
-	Nonce uint32
+	Nonce  uint32
 	Height big.Int
 }
 type IndexIO struct {
-	db *badger.DB
-	hash []byte
+	db       *badger.DB
+	hash     []byte
 	metadata *__metadata__
-	ctx *internal.DirCtx
+	ctx      *t_config.Context
 }
 
+func NewIndexIO(ctx *t_config.Context, hash []byte) *IndexIO {
 
-func (store *IndexIO) New(ctx *internal.DirCtx, hash []byte) {
-	
-	
-	store.hash = hash
-	store.ctx = ctx
-	db, err := badger.Open(badger.DefaultOptions(path.Join(ctx.IndexDir, "index.db")))
-	if err != nil {
-		t_error.LogErr(err)
+	i := IndexIO{
+		hash: hash,
+		ctx:  ctx,
 	}
-	
-	store.db = db
-	
+
+	db, err := badger.Open(badger.DefaultOptions(path.Join(ctx.IndexDir, "blockIndex.db")))
+	t_error.LogErr(err)
+
+	i.db = db
+	return &i
+
 }
 
 func (store *IndexIO) ReadLastHash() {
@@ -53,9 +53,7 @@ func (store *IndexIO) ReadLastHash() {
 		}
 		return nil
 	})
-	if err != nil {
-		t_error.LogErr(err)
-	}
+	t_error.LogErr(err)
 	store.Read()
 }
 
@@ -67,11 +65,8 @@ func (store *IndexIO) WriteLastHash() {
 		}
 		return nil
 	})
-	if err != nil {
-		t_error.LogErr(err)
-	}
+	t_error.LogErr(err)
 }
-
 
 func (store *IndexIO) Create(metadata *BlockMetaData) {
 	store.writeMeta()
@@ -97,9 +92,7 @@ func (store *IndexIO) Read() {
 		return nil
 	})
 
-	if err != nil {
-		t_error.LogErr(err)
-	}
+	t_error.LogErr(err)
 }
 
 func (store *IndexIO) Update(metadata *BlockMetaData) {
@@ -112,12 +105,10 @@ func (store *IndexIO) Delete() {
 		return txn.Delete(store.hash)
 	})
 
-	if err != nil {
-		t_error.LogErr(err)
-	}
+	t_error.LogErr(err)
 }
 
-func (store *IndexIO) Close(){
+func (store *IndexIO) Close() {
 	if err := store.db.Close(); err != nil {
 		t_error.LogErr(err)
 	}
@@ -125,26 +116,25 @@ func (store *IndexIO) Close(){
 
 func (store *IndexIO) MetaData() *BlockMetaData {
 	metadata := BlockMetaData{
-		Hash: store.hash,
-		Nonce: store.metadata.Nonce,
+		Hash:   store.hash,
+		Nonce:  store.metadata.Nonce,
 		Height: store.metadata.Height,
 	}
 	return &metadata
 }
-
 
 // private
 
 func (store *IndexIO) setMeta(metadata *BlockMetaData) {
 
 	store.metadata = &__metadata__{
-		Nonce: metadata.Nonce,
+		Nonce:  metadata.Nonce,
 		Height: metadata.Height,
 	}
 }
 func (store *IndexIO) writeMeta() {
 	err := store.db.Update(func(txn *badger.Txn) error {
-		
+
 		buffer := bytes.Buffer{}
 		enc := gob.NewEncoder(&buffer)
 		enc.Encode(store.metadata)
@@ -154,7 +144,5 @@ func (store *IndexIO) writeMeta() {
 		}
 		return nil
 	})
-	if err != nil {
-		t_error.LogErr(err)
-	}
+	t_error.LogErr(err)
 }

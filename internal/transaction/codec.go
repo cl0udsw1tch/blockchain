@@ -6,9 +6,9 @@ import (
 )
 
 const (
-	OUTPOINT_TXID_SZ 	int = 32 	/ 8
-	OUTPOINT_IDX_SZ  	int = 32 	/ 8
-	TXOUT_VALUE_SZ		int = 64 	/ 8
+	OUTPOINT_TXID_SZ 	int32 = 32
+	OUTPOINT_IDX_SZ  	int32 = 4
+	TXOUT_VALUE_SZ		int32 = 8
 )
 
 type (
@@ -17,6 +17,7 @@ type (
 	BAD_TXIN_ERR struct {}
 	BAD_TX_ERR struct {}
 	BAD_SCRIPT_ERR struct {}
+	BAD_UTXO_ERR struct {}
 )
 
 func (e BAD_OUTPOINT_ERR) Error() string {
@@ -38,6 +39,10 @@ func (e BAD_SCRIPT_ERR) Error() string {
 	return "Incorrect script format."
 }
 
+func (e BAD_UTXO_ERR) Error() string {
+	return "Incorrect UTXO format."
+}
+
 // outpoint codec ========================================= //
 
 // **** decoder **** //
@@ -45,24 +50,31 @@ type OutPointDecoder struct {
 	pt *OutPoint 
 }
 
-func (d *OutPointDecoder) New(pt *OutPoint){
-	d.pt = pt
+func NewOutPointDecoder(pt *OutPoint) *OutPointDecoder {
+	dec := OutPointDecoder{}
+	if pt == nil {
+		dec.pt = &OutPoint{}
+	} else {
+		dec.pt = pt
+	}
+	return &dec
 }
+
 
 func (d *OutPointDecoder) Clear() {
-	d.pt = nil
+	d.pt = &OutPoint{}
 }
 
-func (d *OutPointDecoder) Decode(buffer bytes.Buffer) error {
+func (d *OutPointDecoder) Decode(buffer *bytes.Buffer) error {
 
 
-	if buffer.Len() != OUTPOINT_TXID_SZ + OUTPOINT_IDX_SZ {
+	if int32(buffer.Len()) != OUTPOINT_TXID_SZ + OUTPOINT_IDX_SZ {
 		return BAD_OUTPOINT_ERR{}
 	}
-	b := buffer.Next(OUTPOINT_TXID_SZ + OUTPOINT_IDX_SZ)
+	b := buffer.Next(int(OUTPOINT_TXID_SZ + OUTPOINT_IDX_SZ))
 
 	copy(d.pt.TxId, b[:32])
-	d.pt.Idx = binary.BigEndian.Uint32(b[32:])
+	d.pt.Idx = int32(binary.BigEndian.Uint32(b[32:]))
 
 
 	return nil
@@ -77,16 +89,22 @@ func (d OutPointDecoder) Out() *OutPoint {
 type OutPointEncoder struct {
 	buffer *bytes.Buffer
 }
-
-func (e *OutPointEncoder) New(buffer *bytes.Buffer){
-	e.buffer = buffer
+func NewOutPointEncoder (buffer *bytes.Buffer) *OutPointEncoder {
+	enc := OutPointEncoder{}
+	if buffer == nil {
+		enc.buffer = &bytes.Buffer{}
+	} else {
+		enc.buffer = buffer
+	}
+	return &enc
 }
+
 
 func (e *OutPointEncoder) Clear() {
-	e.buffer = nil
+	e.buffer = &bytes.Buffer{}
 }
 
-func (e *OutPointEncoder) Encode(o OutPoint) {
+func (e *OutPointEncoder) Encode(o *OutPoint) {
 	binary.Write(e.buffer, binary.BigEndian, o.TxId)
 	binary.Write(e.buffer, binary.BigEndian, o.Idx)
 }
@@ -112,15 +130,22 @@ type ScriptDecoder struct {
 	script *ScriptBase
 }
 
-func (d *ScriptDecoder) New(s *ScriptBase) {
-	d.script = s
+func NewScriptDecoder(script *ScriptBase) *ScriptDecoder {
+	dec := ScriptDecoder{}
+	if script == nil {
+		dec.script = &ScriptBase{}
+	} else {
+		dec.script = script
+	}
+	return &dec
 }
 
-func (d *ScriptDecoder) Clear() {
-	d.script = nil
+
+func (dec *ScriptDecoder) Clear() {
+	dec.script = &ScriptBase{}
 }
 
-func (d *ScriptDecoder) Decode(buffer bytes.Buffer) error {
+func (dec *ScriptDecoder) Decode(buffer *bytes.Buffer) error {
 	if buffer.Len() < 1 {
 		return BAD_SCRIPT_ERR{}
 	}
@@ -130,7 +155,7 @@ func (d *ScriptDecoder) Decode(buffer bytes.Buffer) error {
 	}
 	szValBytes := buffer.Next(int(len))
 	szVal := binary.BigEndian.Uint32(szValBytes)
-	d.script.Size = CompactSize{
+	dec.script.Size = CompactSize{
 		Type: len,
 		Size: szValBytes,
 	}
@@ -143,12 +168,12 @@ func (d *ScriptDecoder) Decode(buffer bytes.Buffer) error {
 		_byte = buffer.Next(1)[0]
 		key := OpCode(_byte)
 		if _, ok := OpMap[key]; ok {
-			d.script.Script = append(d.script.Script, []byte{_byte})
+			dec.script.Script = append(dec.script.Script, []byte{_byte})
 			n += 1
 		} else {
 			switch _byte {
 				case byte(OP_PUSHDATA1):
-					d.script.Script = append(d.script.Script, []byte{byte(OP_PUSHDATA1)})
+					dec.script.Script = append(dec.script.Script, []byte{byte(OP_PUSHDATA1)})
 					if buffer.Len() < 1 {
 						return BAD_SCRIPT_ERR{}
 					}
@@ -157,11 +182,11 @@ func (d *ScriptDecoder) Decode(buffer bytes.Buffer) error {
 					if buffer.Len() < int(sz) {
 						return BAD_SCRIPT_ERR{}
 					}
-					d.script.Script = append(d.script.Script, sz_bytes, buffer.Next(int(sz)))
+					dec.script.Script = append(dec.script.Script, sz_bytes, buffer.Next(int(sz)))
 					n += 1 + 1 + uint32(sz)
 
 				case byte(OP_PUSHDATA2):
-					d.script.Script = append(d.script.Script, []byte{byte(OP_PUSHDATA2)})
+					dec.script.Script = append(dec.script.Script, []byte{byte(OP_PUSHDATA2)})
 					if buffer.Len() < 2 {
 						return BAD_SCRIPT_ERR{}
 					}
@@ -170,11 +195,11 @@ func (d *ScriptDecoder) Decode(buffer bytes.Buffer) error {
 					if buffer.Len() < int(sz) {
 						return BAD_SCRIPT_ERR{}
 					}
-					d.script.Script = append(d.script.Script, sz_bytes, buffer.Next(int(sz)))
+					dec.script.Script = append(dec.script.Script, sz_bytes, buffer.Next(int(sz)))
 					n += 1 + 2 + uint32(sz)
 
 				case byte(OP_PUSHDATA4):
-					d.script.Script = append(d.script.Script, []byte{byte(OP_PUSHDATA4)})
+					dec.script.Script = append(dec.script.Script, []byte{byte(OP_PUSHDATA4)})
 					if buffer.Len() < 4 {
 						return BAD_SCRIPT_ERR{}
 					}
@@ -183,7 +208,7 @@ func (d *ScriptDecoder) Decode(buffer bytes.Buffer) error {
 					if buffer.Len() < int(sz) {
 						return BAD_SCRIPT_ERR{}
 					}
-					d.script.Script = append(d.script.Script, sz_bytes, buffer.Next(int(sz)))
+					dec.script.Script = append(dec.script.Script, sz_bytes, buffer.Next(int(sz)))
 					n += 1 + 4 + sz
 					
 				default : 
@@ -195,8 +220,8 @@ func (d *ScriptDecoder) Decode(buffer bytes.Buffer) error {
 	return nil
 }
 
-func (d *ScriptDecoder) Out() *ScriptBase {
-	return d.script
+func (dec *ScriptDecoder) Out() *ScriptBase {
+	return dec.script
 }
 
 // **** encoder **** //
@@ -205,15 +230,21 @@ type ScriptEncoder struct {
 	buffer *bytes.Buffer
 }
 
-func (e ScriptEncoder) New(buffer *bytes.Buffer){
-	e.buffer = buffer
+func NewScriptEncoder (buffer *bytes.Buffer) *ScriptEncoder {
+	enc := ScriptEncoder{}
+	if buffer == nil {
+		enc.buffer = &bytes.Buffer{}
+	} else {
+		enc.buffer = buffer
+	}
+	return &enc
 }
 
-func (e ScriptEncoder) Clear(){
+func (e *ScriptEncoder) Clear(){
 	e.buffer = nil
 }
 
-func (e ScriptEncoder) Encode(s ScriptBase){
+func (e *ScriptEncoder) Encode(s *ScriptBase){
 	
 	binary.Write(e.buffer, binary.BigEndian, s.Size.Type)
 	binary.Write(e.buffer, binary.BigEndian, s.Size.Size)
@@ -223,7 +254,7 @@ func (e ScriptEncoder) Encode(s ScriptBase){
 	}
 }
 
-func (e ScriptEncoder) Bytes() []byte {
+func (e *ScriptEncoder) Bytes() []byte {
 	return e.buffer.Bytes()
 }
 
@@ -238,24 +269,29 @@ type TxOutDecoder struct {
 	txout *TxOut 
 }
 
-func (d TxOutDecoder) New(txout *TxOut){
-	d.txout = txout
+func NewTxOutDecoder(txout *TxOut) *TxOutDecoder {
+	dec := TxOutDecoder{}
+	if txout == nil {
+		dec.txout = &TxOut{}
+	} else {
+		dec.txout = txout
+	}
+	return &dec
 }
 
-func (d TxOutDecoder) Clear() {
-	d.txout = nil
+func (d *TxOutDecoder) Clear() {
+	d.txout = &TxOut{}
 }
 
-func (d TxOutDecoder) Decode(buffer bytes.Buffer) error {
+func (d *TxOutDecoder) Decode(buffer *bytes.Buffer) error {
 
-	if buffer.Len() < TXOUT_VALUE_SZ {
+	if int32(buffer.Len()) < TXOUT_VALUE_SZ {
 		return BAD_TXOUT_ERR{}
 	}
-	d.txout.Value = int64(binary.BigEndian.Uint64(buffer.Next(TXOUT_VALUE_SZ)))
+	d.txout.Value = int64(binary.BigEndian.Uint64(buffer.Next(int(TXOUT_VALUE_SZ))))
 
 	script := ScriptBase{}
-	var scriptD ScriptDecoder;
-	scriptD.New(&script)
+	scriptD := NewScriptDecoder(&script)
 	err := scriptD.Decode(buffer)
 
 	d.txout.LockingScriptSize = script.Size
@@ -264,7 +300,7 @@ func (d TxOutDecoder) Decode(buffer bytes.Buffer) error {
 	return err	
 }
 
-func (d TxOutDecoder) Out() *TxOut {
+func (d *TxOutDecoder) Out() *TxOut {
 	return d.txout
 }
 
@@ -274,30 +310,35 @@ type TxOutEncoder struct {
 	buffer *bytes.Buffer
 }
 
-func (e TxOutEncoder) New(buffer *bytes.Buffer){
-	e.buffer = buffer
+func NewTxOutEncoder (buffer *bytes.Buffer) *TxOutEncoder {
+	enc := TxOutEncoder{}
+	if buffer == nil {
+		enc.buffer = &bytes.Buffer{}
+	} else {
+		enc.buffer = buffer
+	}
+	return &enc
 }
 
-func (e TxOutEncoder) Clear(){
+func (e *TxOutEncoder) Clear(){
 		e.buffer = nil
 }
 
-func (e TxOutEncoder) Encode(txOut TxOut){
+func (e *TxOutEncoder) Encode(txOut *TxOut){
 
 	binary.Write(e.buffer, binary.BigEndian, txOut.Value)
 
-	scriptEncoder := ScriptEncoder{}
-	scriptEncoder.New(e.buffer)
+	scriptEncoder := NewScriptEncoder(e.buffer)
 
 	scriptBase := ScriptBase{
 		Size: txOut.LockingScriptSize,
 		Script: txOut.LockingScript,
 	}
-	scriptEncoder.Encode(scriptBase)
+	scriptEncoder.Encode(&scriptBase)
 
 }
 
-func (e TxOutEncoder) Bytes() []byte {
+func (e *TxOutEncoder) Bytes() []byte {
 	return e.buffer.Bytes()
 }
 
@@ -310,17 +351,23 @@ type TxInDecoder struct {
 	txin *TxIn
 }
 
-func (d *TxInDecoder) New(txin *TxIn) {
-	d.txin = txin
+func NewTxInDecoder(txin *TxIn) *TxInDecoder {
+	dec := TxInDecoder{}
+	if txin == nil {
+		dec.txin = &TxIn{}
+	} else {
+		dec.txin = txin
+	}
+	return &dec
 }
 
 func (d *TxInDecoder) Clear(){
-	d.txin = nil
+	d.txin = &TxIn{}
 }
 
-func (d TxInDecoder) Decode(buffer bytes.Buffer) error {
-	outPointDecoder := OutPointDecoder{}
-	outPointDecoder.New(&d.txin.PrevOutpt)
+func (d TxInDecoder) Decode(buffer *bytes.Buffer) error {
+	
+	outPointDecoder := NewOutPointDecoder(&d.txin.PrevOutpt)
 	err := outPointDecoder.Decode(buffer)
 	if err != nil {
 		return BAD_TXIN_ERR{}
@@ -348,22 +395,28 @@ type TxInEncoder struct {
 	buffer *bytes.Buffer
 }
 
-func (e *TxInEncoder) New(buffer *bytes.Buffer){
-	e.buffer = buffer
+func NewTxInEncoder (buffer *bytes.Buffer) *TxInEncoder {
+	enc := TxInEncoder{}
+	if buffer == nil {
+		enc.buffer = &bytes.Buffer{}
+	} else {
+		enc.buffer = buffer
+	}
+	return &enc
 }
+
 
 func (e *TxInEncoder) Clear(){
 	e.buffer = nil
 }
 
-func (e *TxInEncoder) Encode(txin TxIn){
-	outPointEncoder := OutPointEncoder{}
-	outPointEncoder.New(e.buffer)
-	outPointEncoder.Encode(txin.PrevOutpt)
+func (e *TxInEncoder) Encode(txin *TxIn){
 
-	scriptEncoder := ScriptEncoder{}
-	scriptEncoder.New(e.buffer)
-	scriptEncoder.Encode(ScriptBase{Size: CompactSize{Type: txin.UnlockingScriptSize.Type, Size: txin.UnlockingScriptSize.Size}})
+	outPointEncoder := NewOutPointEncoder(e.buffer)
+	outPointEncoder.Encode(&txin.PrevOutpt)
+
+	scriptEncoder := NewScriptEncoder(e.buffer)
+	scriptEncoder.Encode(&ScriptBase{Size: CompactSize{Type: txin.UnlockingScriptSize.Type, Size: txin.UnlockingScriptSize.Size}})
 
 }
 
@@ -381,19 +434,26 @@ type TxDecoder struct {
 	tx *Tx
 }
 
-func (d *TxDecoder) New(tx *Tx){
-	d.tx = tx
+func NewTxDecoder(tx *Tx) *TxDecoder {
+	dec := TxDecoder{}
+	if tx == nil {
+		dec.tx = &Tx{}
+	} else {
+		dec.tx = tx
+	}
+	return &dec
 }
+
 
 func (d *TxDecoder) Clear(){
-	d.tx = nil
+	d.tx = &Tx{}
 }
 
-func (d *TxDecoder) Decode(buffer bytes.Buffer) error {
+func (d *TxDecoder) Decode(buffer *bytes.Buffer) error {
 	if buffer.Len() < 4 {
 		return BAD_TX_ERR{}
 	}
-	d.tx.Version = binary.BigEndian.Uint32(buffer.Next(4))
+	d.tx.Version = int32(binary.BigEndian.Uint32(buffer.Next(4)))
 
 	if buffer.Len() < 1 {
 		return BAD_TX_ERR{}
@@ -402,8 +462,7 @@ func (d *TxDecoder) Decode(buffer bytes.Buffer) error {
 	d.tx.NumInputs = buffer.Next(1)[0]
 
 	for in := range d.tx.NumInputs {
-		txinDecoder := TxInDecoder{}
-		txinDecoder.New(&d.tx.Inputs[in])
+		txinDecoder := NewTxInDecoder(&d.tx.Inputs[in])
 		if err := txinDecoder.Decode(buffer); err != nil{
 			return err
 		}
@@ -417,8 +476,7 @@ func (d *TxDecoder) Decode(buffer bytes.Buffer) error {
 	d.tx.NumOutputs = buffer.Next(1)[0]
 
 	for out := range d.tx.NumOutputs {
-		txoutDecoder := TxOutDecoder{}
-		txoutDecoder.New(&d.tx.Outputs[out])
+		txoutDecoder := NewTxOutDecoder(&d.tx.Outputs[out])
 		if err := txoutDecoder.Decode(buffer); err != nil{
 			return err
 		}
@@ -442,27 +500,32 @@ type TxEncoder struct {
 	buffer *bytes.Buffer
 }
 
-func (e *TxEncoder) New(buffer *bytes.Buffer){
-	e.buffer = buffer
+func NewTxEncoder (buffer *bytes.Buffer) *TxEncoder {
+	enc := TxEncoder{}
+	if buffer == nil {
+		enc.buffer = &bytes.Buffer{}
+	} else {
+		enc.buffer = buffer
+	}
+	return &enc
 }
 
 func (e *TxEncoder) Clear(){
 	e.buffer = nil
 }
 
-func (e *TxEncoder) Encode(tx Tx){
+func (e *TxEncoder) Encode(tx *Tx){
 	binary.Write(e.buffer, binary.BigEndian, tx.Version)
 	binary.Write(e.buffer, binary.BigEndian, tx.NumInputs)
 	for _, in := range tx.Inputs{
-		inputEncoder := TxInEncoder{}
-		inputEncoder.New(e.buffer)
-		inputEncoder.Encode(in)
+
+		inputEncoder := NewTxInEncoder(e.buffer)
+		inputEncoder.Encode(&in)
 	}
 	binary.Write(e.buffer, binary.BigEndian, tx.NumOutputs)
 	for _, out := range tx.Outputs{
-		outputEncoder := TxOutEncoder{}
-		outputEncoder.New(e.buffer)
-		outputEncoder.Encode(out)
+		outputEncoder := NewTxOutEncoder(e.buffer)
+		outputEncoder.Encode(&out)
 	}
 	binary.Write(e.buffer, binary.BigEndian, tx.LockTime)
 
@@ -475,5 +538,90 @@ func (e *TxEncoder) Bytes() []byte {
 
 // Tx Codec ========================================= //
 
+
+
+// UTXO Codec ======================================== //
+// **** decoder **** //
+type UtxoDecoder struct {
+	utxo *Utxo 
+}
+
+func NewUtxoDecoder(utxo *Utxo) *UtxoDecoder {
+	dec := UtxoDecoder{}
+	if utxo == nil {
+		dec.utxo = &Utxo{}
+	} else {
+		dec.utxo = utxo
+	}
+	return &dec
+}
+
+func (d *UtxoDecoder) Clear() {
+	d.utxo = &Utxo{}
+}
+
+func (d *UtxoDecoder) Decode(buffer *bytes.Buffer) error {
+
+	dec := NewOutPointDecoder(&d.utxo.OutRef)
+	if err := dec.Decode(buffer); err != nil {
+		return BAD_UTXO_ERR{}
+	}
+
+	if buffer.Len() < 8 {
+		return BAD_UTXO_ERR{}
+	}
+
+	d.utxo.Value = int64(binary.BigEndian.Uint64(buffer.Next(4)))
+
+	scriptdec := NewScriptDecoder(&ScriptBase{Size: d.utxo.LockingScriptSize, Script: d.utxo.LockingScript})
+	if err := scriptdec.Decode(buffer); err != nil {
+		return BAD_UTXO_ERR{}
+	}
+	
+	return nil
+}
+
+func (d UtxoDecoder) Out() *Utxo {
+	return d.utxo
+}
+
+// **** encoder **** //
+
+type UtxoEncoder struct {
+	buffer *bytes.Buffer
+}
+
+func NewUtxoEncoder (buffer *bytes.Buffer) *UtxoEncoder {
+	enc := UtxoEncoder{}
+	if buffer == nil {
+		enc.buffer = &bytes.Buffer{}
+	} else {
+		enc.buffer = buffer
+	}
+	return &enc
+}
+
+
+func (e *UtxoEncoder) Clear() {
+	e.buffer = nil
+}
+
+func (e *UtxoEncoder) Encode(utxo *Utxo) {
+
+	outEnc := NewOutPointEncoder(e.buffer)
+	outEnc.Encode(&utxo.OutRef)
+
+	e.buffer.Write([]byte{byte(utxo.Value)})
+	
+	scriptenc := NewScriptEncoder(e.buffer)
+	scriptenc.Encode(&ScriptBase{Size: utxo.LockingScriptSize, Script: utxo.LockingScript})
+
+}
+
+func (e *UtxoEncoder) Bytes() []byte {
+	return e.buffer.Bytes()
+}
+
+// UTXO Codec ======================================== //
 
 

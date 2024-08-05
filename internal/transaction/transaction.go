@@ -1,12 +1,14 @@
 package transaction
 
 import (
+	"bytes"
+	"encoding/binary"
 	"github.com/terium-project/terium/internal/t_util"
 )
 
 type OutPoint struct {
 	TxId []byte
-	Idx  uint32
+	Idx  int32
 }
 
 func (pt OutPoint) Copy() OutPoint {
@@ -28,6 +30,26 @@ const (
 type CompactSize struct {
 	Type byte
 	Size []byte
+}
+
+func NewCompactSize(val int64) CompactSize {
+	buffer := bytes.Buffer{}
+	binary.Write(&buffer, binary.BigEndian, val)
+	sz := 0
+	bts := buffer.Bytes()
+	for sz < len(bts) && bts[sz] == 0 {
+		sz++
+	}
+	if sz == 0 {
+		return CompactSize{
+			Type: byte(0),
+			Size: []byte{0},
+		}
+	}
+	return CompactSize{
+		Type: byte(sz),
+		Size: bts[len(bts) - sz:],
+	}
 }
 
 
@@ -84,15 +106,21 @@ func (s TxIns) Copy() TxIns {
 }
 
 type Tx struct {
-	Version    uint32
+	Version    int32
 	NumInputs  uint8
 	Inputs     TxIns
 	NumOutputs uint8
 	Outputs    TxOuts
 	LockTime   uint32 // number of blocks until spending is allowed
 }
+type Utxo struct {
+	OutRef           	OutPoint
+	Value             	int64
+	LockingScriptSize 	CompactSize
+	LockingScript     	[][]byte
+}
 
-func (s Tx) Copy() Tx {
+func (s *Tx) Copy() Tx {
 
 	o := Tx{
 		Version:    s.Version,
@@ -105,42 +133,68 @@ func (s Tx) Copy() Tx {
 	return o
 }
 
-func (tx Tx) Serialize() []byte {
+func (tx *Tx) Serialize() []byte {
 	e := TxEncoder{}
 	e.Encode(tx)
 	return e.Bytes()
 }
 
+func (tx *Tx) Hash() []byte {
+	return t_util.Hash256(tx.Serialize())
+}
 
 func Coinbase(scriptSz CompactSize, script [][]byte) TxIn {
 	return TxIn{
-		PrevOutpt: OutPoint{TxId: []byte{
-			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		}, Idx: 0xFFFFFFFF},
+		PrevOutpt: OutPoint{TxId: make([]byte, 32), Idx: -1},
 		UnlockingScriptSize: scriptSz,
 		UnlockingScript: script,
 	}
 }
 
-func CoinbaseTx(
-	version uint32, 
-	inScriptSz CompactSize, 
-	inSript [][]byte,
-	nOut uint8, 
-	outputs TxOuts, ) Tx {
-
-	return Tx{
-		Version: version,
-		NumInputs: 1,
-		Inputs: []TxIn{Coinbase(inScriptSz, inSript)},
-		NumOutputs: nOut,
-		Outputs: outputs,
-		LockTime: 100,
-	}
+func IsCoinbase(tx *Tx) bool {
+	return len(tx.Inputs) == 1 && 
+	len(tx.Outputs) == 1 && 
+	tx.Inputs[0].PrevOutpt.Idx == -1 && 
+	bytes.Equal(tx.Inputs[0].PrevOutpt.TxId, make([]byte, 32)) 
 }
+
+
+func (tx *Tx) Preimage(inIdx uint8, inUTXO *Utxo, sigHashFlag byte) []byte {
+	txCopy := tx.Copy()
+
+	for _, tx_in := range txCopy.Inputs {
+		tx_in.UnlockingScript = [][]byte{{0x00}}
+		tx_in.UnlockingScriptSize = CompactSize{Type: COMPACT_SZ1, Size: []byte{0x00}}
+	}
+	txCopy.Inputs[inIdx].UnlockingScriptSize = inUTXO.LockingScriptSize
+	txCopy.Inputs[inIdx].UnlockingScript = inUTXO.LockingScript
+
+	switch SigHashFlag(sigHashFlag & 0b11) {
+	case SIGHASH_ALL:
+		break
+	case SIGHASH_NONE:
+		txCopy.Outputs = []TxOut{}
+	case SIGHASH_SINGLE:
+		txCopy.Outputs = txCopy.Outputs[:inIdx+1]
+		for _, tx_out := range txCopy.Outputs[:inIdx] {
+			tx_out.Value = -1
+			tx_out.LockingScriptSize = CompactSize{Type: COMPACT_SZ1, Size: []byte{0x00}}
+			tx_out.LockingScript = [][]byte{}
+		}
+	}
+
+	if sigHashFlag&uint8(SIGHASH_ANYONECANPAY) != 0 {
+		txCopy.Inputs = []TxIn{txCopy.Inputs[inIdx]}
+	}
+	
+	var txBuffer bytes.Buffer
+	encoder := NewTxEncoder(&txBuffer)
+	encoder.Encode(&txCopy)
+	txBuffer.Write([]byte{sigHashFlag})
+	return t_util.Hash256(txBuffer.Bytes())
+}
+
+
 
 
 

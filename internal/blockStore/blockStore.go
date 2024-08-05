@@ -2,23 +2,19 @@ package blockStore
 
 import (
 	"github.com/terium-project/terium/internal/block"
-	"github.com/terium-project/terium/internal"
-
+	"github.com/terium-project/terium/internal/t_config"
 )
 
-
 type BlockStore struct {
-	blockIO BlockIO
-	indexIO IndexIO
+	blockIO *BlockIO
+	indexIO *IndexIO
 }
 
-func (store *BlockStore) New(ctx *internal.DirCtx, hash []byte) {
-	
-	store.blockIO = BlockIO{}
-	store.blockIO.New(ctx, hash)
-
-	store.indexIO = IndexIO{}
-	store.indexIO.New(ctx, hash)
+func NewBlockStore(ctx *t_config.Context, hash []byte) *BlockStore {
+	store := BlockStore{}
+	store.blockIO = NewBlockIO(ctx, hash)
+	store.indexIO = NewIndexIO(ctx, hash)
+	return &store
 }
 
 func (store *BlockStore) Write(block *block.Block, metadata *BlockMetaData) {
@@ -39,7 +35,7 @@ func (store *BlockStore) Metadata() *BlockMetaData {
 	return store.indexIO.MetaData()
 }
 
-func (store *BlockStore) Update(block *block.Block, metadata *BlockMetaData){
+func (store *BlockStore) Update(block *block.Block, metadata *BlockMetaData) {
 	store.blockIO.Update(block)
 	store.indexIO.Update(metadata)
 }

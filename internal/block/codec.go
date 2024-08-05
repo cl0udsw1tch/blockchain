@@ -28,15 +28,21 @@ type HeaderDecoder struct {
 	header *Header
 }
 
-func (d HeaderDecoder) New(header *Header) {
-	d.header = header
+func NewHeaderDecoder(header *Header) *HeaderDecoder {
+	dec := HeaderDecoder{}
+	if header == nil {	
+		dec.header = &Header{}
+	} else {
+		dec.header = header
+	}
+	return &dec
 }
 
-func (d HeaderDecoder) Clear() {
-	d.header = nil
+func (d *HeaderDecoder) Clear() {
+	d.header = &Header{}
 }
 
-func (d HeaderDecoder) Decode(buffer bytes.Buffer) error {
+func (d *HeaderDecoder) Decode(buffer *bytes.Buffer) error {
 
 	if buffer.Len() < 4 + 32 + 32 + 4 + 256 + 4 {
 		return BAD_HEADER_ERR{}
@@ -53,7 +59,7 @@ func (d HeaderDecoder) Decode(buffer bytes.Buffer) error {
 	return nil
 }
 
-func (d HeaderDecoder) Out() *Header {
+func (d *HeaderDecoder) Out() *Header {
 	return d.header
 }
 
@@ -63,24 +69,27 @@ type HeaderEncoder struct {
 	buffer *bytes.Buffer
 }
 
-func (e HeaderEncoder) New(buffer *bytes.Buffer) {
-	e.buffer = buffer
+func NewHeaderEncoder(buffer *bytes.Buffer) *HeaderEncoder {
+	enc := HeaderEncoder{
+		buffer: buffer,
+	}
+	return &enc
 }
 
-func (e HeaderEncoder) Clear() {
-	e.buffer = nil
+func (e *HeaderEncoder) Clear() {
+	e.buffer = &bytes.Buffer{}
 }
 
-func (e HeaderEncoder) Encode(header Header) {
+func (e *HeaderEncoder) Encode(header *Header) {
 	binary.Write(e.buffer, binary.BigEndian, header.Version)
 	binary.Write(e.buffer, binary.BigEndian, header.PrevHash)
 	binary.Write(e.buffer, binary.BigEndian, header.MerkleRootHash)
 	binary.Write(e.buffer, binary.BigEndian, header.TimeStamp)
-	binary.Write(e.buffer, binary.BigEndian, header.Target)
+	binary.Write(e.buffer, binary.BigEndian, header.Target.Bytes())
 	binary.Write(e.buffer, binary.BigEndian, header.Nonce)
 }
 
-func (e HeaderEncoder) Bytes() []byte {
+func (e *HeaderEncoder) Bytes() []byte {
 	return e.buffer.Bytes()
 }
 
@@ -94,17 +103,23 @@ type BlockDecoder struct {
 	block *Block
 }
 
-func (d BlockDecoder) New(block *Block) {
-	d.block = block
+func NewBlockDecoder(block *Block) *BlockDecoder {
+	dec := BlockDecoder{}
+	if block == nil {	
+		dec.block = &Block{}
+	} else {
+		dec.block = block
+	}
+	return &dec
 }
 
-func (d BlockDecoder) Clear() {
-	d.block = nil
+func (d *BlockDecoder) Clear() {
+	d.block = &Block{}
 }
 
-func (d BlockDecoder) Decode(buffer bytes.Buffer) error {
-	headerDecoder := HeaderDecoder{}
-	headerDecoder.New(&d.block.Header)
+func (d *BlockDecoder) Decode(buffer *bytes.Buffer) error {
+{}
+	headerDecoder := NewHeaderDecoder(&d.block.Header)
 	if err := headerDecoder.Decode(buffer); err != nil {
 		return BAD_BLOCK_ERR{}
 	}
@@ -113,24 +128,22 @@ func (d BlockDecoder) Decode(buffer bytes.Buffer) error {
 	}
 	d.block.TXCount = binary.BigEndian.Uint32(buffer.Next(4))
 
-	txDec := transaction.TxDecoder{}
+	txDec := transaction.NewTxDecoder(nil)
 	
 	var i uint32 = 0
 	for i < d.block.TXCount {
 		txDec.Clear()
-		tx := transaction.Tx{}
-		txDec.New(&tx)
 		if err := txDec.Decode(buffer); err != nil {
 			return BAD_BLOCK_ERR{}
 		}
-		d.block.Transactions = append(d.block.Transactions, tx)
+		d.block.Transactions = append(d.block.Transactions, *txDec.Out())
 		i++
 	}
 
 	return nil
 }
 
-func (d BlockDecoder) Out() *Block {
+func (d *BlockDecoder) Out() *Block {
 	return d.block
 }
 
@@ -140,30 +153,32 @@ type BlockEncoder struct {
 	buffer *bytes.Buffer
 }
 
-func (e BlockEncoder) New(buffer *bytes.Buffer) {
-	e.buffer = buffer
+func NewBlockEncoder(buffer *bytes.Buffer) *BlockEncoder {
+	enc := BlockEncoder{
+		buffer: buffer,
+	}
+	return &enc
 }
 
-func (e BlockEncoder) Clear(){
-	e.buffer = nil
+func (e *BlockEncoder) Clear(){
+	e.buffer = &bytes.Buffer{}
 }
 
-func (e BlockEncoder) Encode(block Block) {
-	headerEnc := HeaderEncoder{}
-	headerEnc.New(e.buffer)
-	headerEnc.Encode(block.Header)
+func (e *BlockEncoder) Encode(block *Block) {
+
+	headerEnc := NewHeaderEncoder(e.buffer)
+	headerEnc.Encode(&block.Header)
 
 	binary.Write(e.buffer, binary.BigEndian, block.TXCount)
 
-	txEnc := transaction.TxEncoder{}
+	txEnc := transaction.NewTxEncoder(e.buffer)
 	for _, tx := range block.Transactions {
 		txEnc.Clear()
-		txEnc.New(e.buffer)
-		txEnc.Encode(tx)
+		txEnc.Encode(&tx)
 	}
 }
 
-func (e BlockEncoder) Bytes() []byte {
+func (e *BlockEncoder) Bytes() []byte {
 	return e.buffer.Bytes()
 }
 

@@ -3,58 +3,54 @@ package blockStore
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/hex"
 	"math/big"
 	"os"
 	"path"
-
-	"github.com/terium-project/terium/internal"
+	"github.com/terium-project/terium/internal/t_config"
 	"github.com/terium-project/terium/internal/block"
 	"github.com/terium-project/terium/internal/t_error"
 )
 
-type CorruptBlockErr struct {}
+type CorruptBlockErr struct{}
 
 func (c CorruptBlockErr) Error() string {
 	return "Block is corrupt."
 }
 
 type BlockMetaData struct {
-	Hash []byte
-	Nonce uint32
+	Hash   []byte
+	Nonce  uint32
 	Height big.Int
 }
 
-
 type BlockIO struct {
-	ctx *internal.DirCtx
+	ctx   *t_config.Context
 	block *block.Block
 	bytes []byte
-	sum []byte
-	hash []byte
-	path string
+	sum   []byte
+	hash  []byte
+	path  string
 }
 
-func (b *BlockIO) New(ctx *internal.DirCtx, hash []byte) {
-	b.ctx = ctx
-	b.hash = hash
-	b.path = path.Join(b.ctx.DataDir, string(b.hash))
-	b.ctx = &internal.T_DirCtx
+func NewBlockIO(ctx *t_config.Context, hash []byte) *BlockIO {
+	return &BlockIO{
+		hash: hash,
+		path: path.Join(ctx.DataDir, hex.EncodeToString(hash)),
+		ctx:  ctx,
+	}
 }
 
 func (b *BlockIO) Write(block *block.Block) error {
-
-
-
-	f, err := os.OpenFile(b.path, os.O_CREATE | os.O_RDWR, 0644)
+	b.block = block
+	f, err := os.OpenFile(b.path, os.O_CREATE|os.O_RDWR, 0644)
 
 	if err != nil {
 		return err
 	}
 	b.bytes = b.block.Serialize()
 	n, err := f.Write(b.bytes)
-	if err != nil {
-		t_error.LogErr(err)
-	}
+	t_error.LogErr(err)
 
 	b.Checksum()
 	f.WriteAt(b.sum, int64(n))
@@ -64,11 +60,9 @@ func (b *BlockIO) Write(block *block.Block) error {
 func (b *BlockIO) Read() error {
 
 	_bytes, err := os.ReadFile(b.path)
-	if err != nil {
-		t_error.LogErr(err)
-	}
-	b.bytes = _bytes[:len(_bytes) - 32]
-	b.sum = _bytes[len(_bytes) - 32:]
+	t_error.LogErr(err)
+	b.bytes = _bytes[:len(_bytes)-32]
+	b.sum = _bytes[len(_bytes)-32:]
 
 	valid := b.Check()
 
@@ -76,11 +70,10 @@ func (b *BlockIO) Read() error {
 		return CorruptBlockErr{}
 	}
 
-	blockDecoder := block.BlockDecoder{}
+	blockDecoder := block.NewBlockDecoder(b.block)
 	buffer := bytes.Buffer{}
 	buffer.Write(b.bytes)
-	blockDecoder.New(b.block)
-	blockDecoder.Decode(buffer)
+	blockDecoder.Decode(&buffer)
 
 	return nil
 }

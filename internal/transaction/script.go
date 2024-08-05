@@ -1,25 +1,34 @@
 package transaction
 
 import (
-	"bytes"
 	"crypto/ecdsa"
 	"crypto/sha256"
 	"encoding/binary"
-	"encoding/gob"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"regexp"
+
+	"github.com/terium-project/terium/internal/client"
+	"github.com/terium-project/terium/internal/t_error"
 	"github.com/terium-project/terium/internal/t_util"
 	"golang.org/x/crypto/ripemd160"
 )
+
+const P2PKH_LOCK_SCRIPT_SZ int64 = 26 
 
 type OpCode byte
 type OpState byte
 type OpFunc func(ctx *OpCtx)
 type OpCtx struct {
-	Tx     Tx
-	Stack  OpStack
-	State  OpState
-	TxIn   TxIn
-	InUtxo Utxo
-	InIdx  uint8
+	Tx     		*Tx
+	Stack  		OpStack
+	State  		OpState
+	TxIn   		*TxIn
+	InUtxo 		*Utxo
+	InIdx  		uint8
+	Script 		[][]byte
+	ScriptPtr	uint8
 }
 
 type OpMap_T map[OpCode]OpFunc
@@ -38,6 +47,12 @@ const (
 	OP_PUSHDATA4	OpCode = 0x0A
 )
 
+var OpPushMap map[OpCode]int = map[OpCode]int {
+	OP_PUSHDATA1: 1,
+	OP_PUSHDATA2: 2,
+	OP_PUSHDATA4: 4,
+}
+
 type SigHashFlag byte
 
 const (
@@ -49,6 +64,9 @@ const (
 
 var (
 	OpMap OpMap_T = OpMap_T{
+		OP_PUSHDATA1:	OpPushData,
+		OP_PUSHDATA2:	OpPushData,
+		OP_PUSHDATA4:	OpPushData,
 		OP_DUP:         OpDup,
 		OP_HASH160:     OpHash160,
 		OP_EQUALVERIFY: OpEqualVerify,
@@ -57,8 +75,18 @@ var (
 		OP_CHECKSIG:    OpCheckSig,
 	}
 
+	OpPushData OpFunc = func(ctx *OpCtx) {
+		nSz := OpPushMap[OpCode(ctx.Script[ctx.ScriptPtr][0])]
+		ctx.ScriptPtr++
+		sz := binary.BigEndian.Uint32(ctx.Script[ctx.ScriptPtr][:nSz])
+		ctx.ScriptPtr++
+		ctx.Stack.Push(ctx.Script[ctx.ScriptPtr][:sz])
+		ctx.ScriptPtr++
+	}
+
 	OpDup OpFunc = func(ctx *OpCtx) {
 		ctx.Stack.Push(ctx.Stack.Peek())
+		ctx.ScriptPtr++
 	}
 
 	OpHash160 OpFunc = func(ctx *OpCtx) {
@@ -67,11 +95,13 @@ var (
 		sha256Hasher.Write(ctx.Stack.Peek())
 		ripemd160Hasher.Write(sha256Hasher.Sum(nil))
 		ctx.Stack.Push(ripemd160Hasher.Sum(nil))
+		ctx.ScriptPtr++
 	}
 
 	OpEqualVerify OpFunc = func(ctx *OpCtx) {
 		OpEqual(ctx)
 		OpVerify(ctx)
+		ctx.ScriptPtr--
 	}
 
 	OpEqual OpFunc = func(ctx *OpCtx) {
@@ -82,6 +112,7 @@ var (
 		} else {
 			ctx.Stack.Push([]byte{0x00})
 		}
+		ctx.ScriptPtr++
 	}
 
 	OpVerify OpFunc = func(ctx *OpCtx) {
@@ -91,6 +122,7 @@ var (
 		} else {
 			ctx.State = OP_PANIC
 		}
+		ctx.ScriptPtr++
 	}
 
 	OpCheckSig OpFunc = func(ctx *OpCtx) {
@@ -100,52 +132,72 @@ var (
 		sigHashFlag := uint8(binary.BigEndian.Uint16(sig[len(sig)-8:]))
 		sig = sig[:len(sig)-8]
 
-		txCopy := ctx.Tx.Copy()
+		preimage := ctx.Tx.Preimage(ctx.InIdx, ctx.InUtxo, sigHashFlag)
 
-		for _, tx_in := range txCopy.Inputs {
-			tx_in.UnlockingScript = [][]byte{{0x00}}
-			tx_in.UnlockingScriptSize = CompactSize{Type: COMPACT_SZ1, Size: []byte{0x00}}
-		}
-		txCopy.Inputs[ctx.InIdx].UnlockingScriptSize = ctx.InUtxo.LockingScriptSize
-		txCopy.Inputs[ctx.InIdx].UnlockingScript = ctx.InUtxo.LockingScript
-
-		switch SigHashFlag(sigHashFlag & 0b11) {
-		case SIGHASH_ALL:
-			break
-		case SIGHASH_NONE:
-			txCopy.Outputs = []TxOut{}
-		case SIGHASH_SINGLE:
-			txCopy.Outputs = txCopy.Outputs[:ctx.InIdx+1]
-			for _, tx_out := range txCopy.Outputs[:ctx.InIdx] {
-				tx_out.Value = -1
-				tx_out.LockingScriptSize = CompactSize{Type: COMPACT_SZ1, Size: []byte{0x00}}
-				tx_out.LockingScript = [][]byte{}
-			}
-		}
-
-		if sigHashFlag&uint8(SIGHASH_ANYONECANPAY) != 0 {
-			txCopy.Inputs = []TxIn{txCopy.Inputs[ctx.InIdx]}
-		}
-
-		var txBuffer bytes.Buffer
-		encoder := gob.NewEncoder(&txBuffer)
-		encoder.Encode(txCopy)
-
-		txBuffer.Write([]byte{sigHashFlag})
-
-		var pubKeyObj ecdsa.PublicKey
-		var bufferPK bytes.Buffer
-		bufferPK.Write(pubKey)
-		decoder := gob.NewDecoder(&bufferPK)
-		decoder.Decode(&pubKeyObj)
-
-		valid := ecdsa.VerifyASN1(&pubKeyObj, txBuffer.Bytes(), sig)
+		pubKeyObj := client.UnMarshalPubKey(pubKey)
+		valid := ecdsa.VerifyASN1(pubKeyObj, preimage, sig)
 
 		if valid {
 			ctx.State = OP_OK
+			ctx.ScriptPtr++
 			return
 		}
 		ctx.State = OP_PANIC
+		ctx.ScriptPtr++
 
 	}
 )
+
+type Interpreter struct {
+	ctx *OpCtx
+}
+
+func NewInterpreter(ctx *OpCtx) *Interpreter {
+	i := new(Interpreter)
+	i.ctx = ctx
+	return i
+}
+
+func (i *Interpreter) Execute() OpState {
+	for i.ctx.ScriptPtr	< uint8(len(i.ctx.Script)) {
+		OpMap[OpCode(i.ctx.Script[i.ctx.ScriptPtr][0])](i.ctx)
+	}
+	return OpState(i.ctx.Stack.Peek()[0])
+}
+
+
+func GetAddrFromP2PKHLockScript(script [][]byte) string {
+	scriptStr := t_util.ConvertToHexString(script)
+
+
+	pattern := fmt.Sprintf(`^%x%x%x%x([0-9a-fA-F]{40})%x%x$`, 
+		OP_DUP, 
+		OP_HASH160,
+		OP_PUSHDATA1,
+		0x14,
+		OP_EQUALVERIFY,
+		OP_CHECKSIG,
+	)
+	re := regexp.MustCompile(pattern)
+	if !re.MatchString(scriptStr) {
+		t_error.LogErr(errors.New("bad scriptPubKey"))
+	}
+	matches := re.FindAllStringSubmatch(scriptStr, 1)
+	return matches[0][0]
+
+
+}
+
+func P2PKH_LockScript(addrHex string) [][]byte {
+	addrBytes, err := hex.DecodeString(addrHex)
+	t_error.LogErr(err)
+	return [][]byte{
+		{byte(OP_DUP)}, // 1
+		{byte(OP_HASH160)}, // 1 
+		{byte(OP_PUSHDATA1)}, // 1 
+		{byte(0x14)}, // 1
+		addrBytes[1:21], // 20
+		{byte(OP_EQUALVERIFY)}, // 1
+		{byte(OP_CHECKSIG)}, // 1
+	}
+}

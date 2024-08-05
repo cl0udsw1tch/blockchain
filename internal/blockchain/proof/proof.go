@@ -30,24 +30,30 @@ func NewPoW(block *block.Block) PoW {
 	return PoW{block: block, notifier: make(chan PoWState)}
 }
 
-func (pow PoW) Solve() {
+func (pow PoW) Solve(quitSig <-chan byte, ackChan chan<- byte) {
 
 	var hash big.Int
 	state := PoWState{Nonce: 0, Solved: false}
 
 	for state.Nonce < (1<<32 - 1) {
-		pow.block.Header.Nonce = state.Nonce
-		hash.SetBytes(pow.block.Hash())
-
-		state.Hash = hash.Bytes()
-
-		if pow.verifyHash(hash) {
-			state.Solved = true
-			pow.notifier <- state
+		select {
+		case <-quitSig :
+			ackChan<-0x00
 			return
+		default : 
+			pow.block.Header.Nonce = state.Nonce
+			hash.SetBytes(pow.block.Hash())
+
+			state.Hash = hash.Bytes()
+
+			if pow.verifyHash(hash) {
+				state.Solved = true
+				pow.notifier <- state
+				return
+			}
+			pow.notifier <- state
+			state.Nonce++
 		}
-		pow.notifier <- state
-		state.Nonce++
 	}
 	
 	t_error.LogErr(NoNonceError{})
