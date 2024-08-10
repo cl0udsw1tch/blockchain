@@ -17,12 +17,26 @@ type TxValidator struct {
 	ctx        *t_config.Context
 	blockchain *blockchain.Blockchain
 	tx         *transaction.Tx
+	txStore 	*transaction.TxIndexIO
+	blockStore	*blockStore.BlockStore
+	mempool 	*mempool.MempoolIO
+	utxoStore 	*utxoSet.UtxoStore
 }
 
-func NewTxValidator(ctx *t_config.Context) *TxValidator {
+func NewTxValidator(
+	ctx *t_config.Context, 
+	_txStore *transaction.TxIndexIO, 
+	_blockStore *blockStore.BlockStore, 
+	_mempool *mempool.MempoolIO,
+	_utxoStore 	*utxoSet.UtxoStore,
+	) *TxValidator {
 	v := new(TxValidator)
 	v.ctx = ctx
-	v.blockchain = blockchain.NewBlockchain(ctx)
+	v.blockchain = blockchain.NewBlockchain(ctx, _blockStore)
+	v.txStore = _txStore
+	v.blockStore = _blockStore
+	v.mempool = _mempool
+	v.utxoStore = _utxoStore
 	return v
 }
 
@@ -81,17 +95,14 @@ func (v *TxValidator) assertSpentCoinbaseMaturity() bool {
 
 	for _, in := range v.tx.Inputs {
 
-		store := transaction.NewTxIndexIO(v.ctx)
-		meta := store.Read(in.PrevOutpt.TxId)
+		txMeta := v.txStore.Read(in.PrevOutpt.TxId)
+		block, _ := v.blockStore.Read(txMeta.BlockHash)
 
-		_blockStore := blockStore.NewBlockStore(v.ctx, meta.BlockHash)
-		_blockStore.Read()
-		block := _blockStore.Block()
-		prevTx := block.Transactions[meta.Index]
+		prevTx := block.Transactions[txMeta.Index]
 
-		if transaction.IsCoinbase(&prevTx) {
+		if (&prevTx).IsCoinbase() {
 			h := v.blockchain.Height()
-			if h.Cmp(new(big.Int).Add(&v.blockchain.TxMeta(v.tx.Hash()).BlockHeight, big.NewInt(int64(t_config.COINBASE_MATURITY)))) == -1 {
+			if h.Cmp(new(big.Int).Add(&txMeta.BlockHeight, big.NewInt(int64(t_config.COINBASE_MATURITY)))) == -1 {
 				return false
 			}
 		}
@@ -130,18 +141,14 @@ func (v *TxValidator) assertSigScriptSyntax() bool {
 }
 
 func (v *TxValidator) assertTxNotInPool() bool {
-	store := mempool.NewMempoolIO(v.ctx)
-	defer store.Close()
-	_, _, ok := store.Read(v.tx.Hash())
+	_, _, ok := v.mempool.Read(v.tx.Hash())
 	return !ok
 }
 
 func (v *TxValidator) assertTxInUTXOs() bool {
-	store := utxoSet.NewUtxoStore(v.ctx)
-	defer store.Close()
 	for _, in := range v.tx.Inputs {
 		outpt := in.PrevOutpt
-		_, ok := store.Read(&outpt)
+		_, ok := v.utxoStore.Read(&outpt)
 		if !ok {
 			return false
 		}
@@ -150,12 +157,10 @@ func (v *TxValidator) assertTxInUTXOs() bool {
 }
 
 func (v *TxValidator) validate() bool {
-	store := utxoSet.NewUtxoStore(v.ctx)
-	defer store.Close()
 
 	for i, in := range v.tx.Inputs {
 		outpt := in.PrevOutpt
-		utxo, ok := store.Read(&outpt)
+		utxo, ok := v.utxoStore.Read(&outpt)
 		if !ok {
 			panic("Utxo not found")
 		}

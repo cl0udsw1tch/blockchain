@@ -11,13 +11,13 @@ import (
 
 const (
 	Version           int32 = 0x01
-	NBits             uint8 = 0x40
+	NBits             uint8 = 20
 	COINBASE_MATURITY uint8 = 100
 	BLOCK_REWARD      int64 = 100_000
 )
 
 var (
-	Target big.Int = *(&big.Int{}).Lsh(big.NewInt(1), uint(NBits))
+	Target *big.Int
 )
 
 type TERIUM_ROOT_ERR struct{}
@@ -37,7 +37,7 @@ func (e TMP_DIR_ERR) Error() string {
 	return ".tmp directory does not exist."
 }
 func (e WALLET_DIR_ERR) Error() string {
-	return ".wallets directory does not exist."
+	return "wallets directory does not exist."
 }
 func (e DB_DIR_ERR) Error() string {
 	return ".db directory does not exist."
@@ -63,7 +63,9 @@ var NumTxInBlock uint8 = 10
 var RpcEndpointPort uint16 = 8033
 
 func NewContext() *Context {
+
 	ctx := new(Context)
+	ctx.NodeConfig = &Config{}
 	t_error.LogErr(ctx.GetPaths())
 	ctx.GetConfig()
 	return ctx 
@@ -74,7 +76,7 @@ func (ctx *Context) GetPaths() error {
 	if root == "" {
 		return TERIUM_ROOT_ERR{}
 	}
-	if _, err := os.Stat(root); err == os.ErrNotExist {
+	if _, err := os.Stat(root); os.IsNotExist(err) {
 		return TERIUM_ROOT_ERR{}
 	} else if err != nil {
 		return err
@@ -85,34 +87,46 @@ func (ctx *Context) GetPaths() error {
 	// these dont have to exist and can be created by the app
 
 	ctx.DataDir = path.Join(root, ".data")
-	if _, err := os.Stat(ctx.DataDir); err == os.ErrNotExist {
-		os.Mkdir(ctx.DataDir, 0600)
+	if _, err := os.Stat(ctx.DataDir); os.IsNotExist(err) {
+		os.Mkdir(ctx.DataDir, os.FileMode(0777))
 	} else if err != nil {
 		return err
 	}
 	ctx.IndexDir = path.Join(root, ".data", "index")
-	if _, err := os.Stat(ctx.IndexDir); err == os.ErrNotExist {
-		os.Mkdir(ctx.IndexDir, 0600)
+	if _, err := os.Stat(ctx.IndexDir); os.IsNotExist(err) {
+		os.Mkdir(ctx.IndexDir, os.FileMode(0777))
 	} else if err != nil {
 		return err
 	}
 	ctx.TmpDir = path.Join(root, ".tmp")
-	if _, err := os.Stat(ctx.TmpDir); err == os.ErrNotExist {
-		os.Mkdir(ctx.TmpDir, 0600)
+	if _, err := os.Stat(ctx.TmpDir); os.IsNotExist(err) {
+		os.Mkdir(ctx.TmpDir, os.FileMode(0777))
 	} else if err != nil {
 		return err
 	}
-	ctx.WalletDir = path.Join(root, ".wallets")
-	if _, err := os.Stat(ctx.WalletDir); err == os.ErrNotExist {
-		os.Mkdir(ctx.WalletDir, 0600)
+	ctx.WalletDir = path.Join(root, "wallets")
+	if _, err := os.Stat(ctx.WalletDir); os.IsNotExist(err) {
+		os.Mkdir(ctx.WalletDir, os.FileMode(0777))
 	} else if err != nil {
 		return err
 	}
 	ctx.ConfigPath = path.Join(root, "config.json")
+	if _, err := os.Stat(ctx.ConfigPath); os.IsNotExist(err) {
+		fs, err := os.Create(ctx.ConfigPath)
+		t_error.LogErr(err)
+		_, err = fs.WriteString("{}")
+		t_error.LogErr(err)
+		err = fs.Close()
+		t_error.LogErr(err)
+	} else if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (ctx *Context) GetConfig() {
+
+	Target = new(big.Int).Lsh(big.NewInt(1), uint(255 - NBits + 1))
 
 	conf, err := os.ReadFile(ctx.ConfigPath)
 	t_error.LogErr(err)
@@ -134,6 +148,6 @@ func (ctx *Context) GetConfig() {
 	if changed {
 		bytes, err := json.Marshal(ctx.NodeConfig)
 		t_error.LogErr(err)
-		os.WriteFile(ctx.ConfigPath, bytes, 0600)
+		os.WriteFile(ctx.ConfigPath, bytes, os.FileMode(0777))
 	}
 }

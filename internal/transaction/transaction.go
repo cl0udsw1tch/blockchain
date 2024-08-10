@@ -3,6 +3,7 @@ package transaction
 import (
 	"bytes"
 	"encoding/binary"
+
 	"github.com/terium-project/terium/internal/t_util"
 )
 
@@ -48,10 +49,9 @@ func NewCompactSize(val int64) CompactSize {
 	}
 	return CompactSize{
 		Type: byte(sz),
-		Size: bts[len(bts) - sz:],
+		Size: bts[len(bts)-sz:],
 	}
 }
-
 
 type TxOut struct {
 	Value             int64
@@ -114,10 +114,10 @@ type Tx struct {
 	LockTime   uint32 // number of blocks until spending is allowed
 }
 type Utxo struct {
-	OutRef           	OutPoint
-	Value             	int64
-	LockingScriptSize 	CompactSize
-	LockingScript     	[][]byte
+	OutPoint          OutPoint
+	Value             int64
+	LockingScriptSize CompactSize
+	LockingScript     [][]byte
 }
 
 func (s *Tx) Copy() Tx {
@@ -145,19 +145,28 @@ func (tx *Tx) Hash() []byte {
 
 func Coinbase(scriptSz CompactSize, script [][]byte) TxIn {
 	return TxIn{
-		PrevOutpt: OutPoint{TxId: make([]byte, 32), Idx: -1},
+		PrevOutpt:           OutPoint{TxId: make([]byte, 32), Idx: -1},
 		UnlockingScriptSize: scriptSz,
-		UnlockingScript: script,
+		UnlockingScript:     script,
 	}
 }
 
-func IsCoinbase(tx *Tx) bool {
-	return len(tx.Inputs) == 1 && 
-	len(tx.Outputs) == 1 && 
-	tx.Inputs[0].PrevOutpt.Idx == -1 && 
-	bytes.Equal(tx.Inputs[0].PrevOutpt.TxId, make([]byte, 32)) 
+func (tx *Tx) IsCoinbase() bool {
+	return len(tx.Inputs) == 1 &&
+		len(tx.Outputs) == 1 &&
+		tx.Inputs[0].PrevOutpt.Idx == -1 &&
+		bytes.Equal(tx.Inputs[0].PrevOutpt.TxId, make([]byte, 32))
 }
 
+func (tx *Tx) HasCoinbases() bool {
+	for _, in := range tx.Inputs {
+		if in.PrevOutpt.Idx == -1 ||
+			bytes.Equal(in.PrevOutpt.TxId, make([]byte, 32)) {
+			return true
+		}
+	}
+	return false
+}
 
 func (tx *Tx) Preimage(inIdx uint8, inUTXO *Utxo, sigHashFlag byte) []byte {
 	txCopy := tx.Copy()
@@ -186,16 +195,10 @@ func (tx *Tx) Preimage(inIdx uint8, inUTXO *Utxo, sigHashFlag byte) []byte {
 	if sigHashFlag&uint8(SIGHASH_ANYONECANPAY) != 0 {
 		txCopy.Inputs = []TxIn{txCopy.Inputs[inIdx]}
 	}
-	
+
 	var txBuffer bytes.Buffer
 	encoder := NewTxEncoder(&txBuffer)
 	encoder.Encode(&txCopy)
 	txBuffer.Write([]byte{sigHashFlag})
 	return t_util.Hash256(txBuffer.Bytes())
 }
-
-
-
-
-
-

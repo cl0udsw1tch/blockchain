@@ -27,12 +27,13 @@ func HashPublicKey(pk *ecdsa.PublicKey) []byte {
 	sha256Hasher.Write(MarshalPubKey(pk))
 	pubKeyHash := sha256Hasher.Sum(nil) // sha256
 	ripemdHasher := ripemd160.New()
-	ripemdHash := ripemdHasher.Sum(pubKeyHash)
+	ripemdHasher.Write(pubKeyHash)
+	ripemdHash := ripemdHasher.Sum(nil)
 	return ripemdHash
 }
 
 func MakeAddress(pkhash []byte) string {
-	address := append([]byte{0x00, 0x00}, pkhash...) // 2 byte version
+	address := append([]byte{0x00}, pkhash...) // 1 byte version
 	hash := t_util.Hash256(address) // double sha256 hash
 	checksum := hash[:4]
 	address = append(address, checksum...)
@@ -55,11 +56,11 @@ func MarshalPubKey(pk *ecdsa.PublicKey) []byte {
 func UnMarshalPubKey(b []byte) *ecdsa.PublicKey {
 	r, err := x509.ParsePKIXPublicKey(b)
 	t_error.LogErr(err)
-	key, ok := r.(ecdsa.PublicKey)
+	key, ok := r.(*ecdsa.PublicKey)
 	if !ok {
 		panic("Bad public key.")
 	}
-	return &key
+	return key
 }
 
 func MarshalPrivKey(pk *ecdsa.PrivateKey) []byte {

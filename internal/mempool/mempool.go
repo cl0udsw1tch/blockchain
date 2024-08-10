@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/terium-project/terium/internal/t_config"
 	"github.com/terium-project/terium/internal/t_error"
 	"github.com/terium-project/terium/internal/transaction"
@@ -25,9 +26,10 @@ func NewMempoolIO(ctx *t_config.Context) *MempoolIO {
 	store := new(MempoolIO)
 	store.ctx = ctx
 	var err error
+	
 	store.db, err = sql.Open("sqlite3", ":memory:")
 	t_error.LogErr(err)
-	bytes, err := os.ReadFile("./internal/mempoool/mempool.sql")
+	bytes, err := os.ReadFile("./internal/mempool/mempool.sql")
 	t_error.LogErr(err)
 	sqlCommand := string(bytes)
 	_, err = store.db.Exec(sqlCommand)

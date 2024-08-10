@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"math/big"
 	"os"
 	"path"
-	"github.com/terium-project/terium/internal/t_config"
+
 	"github.com/terium-project/terium/internal/block"
+	"github.com/terium-project/terium/internal/t_config"
 	"github.com/terium-project/terium/internal/t_error"
 )
 
@@ -26,85 +28,76 @@ type BlockMetaData struct {
 
 type BlockIO struct {
 	ctx   *t_config.Context
-	block *block.Block
-	bytes []byte
-	sum   []byte
-	hash  []byte
-	path  string
 }
 
-func NewBlockIO(ctx *t_config.Context, hash []byte) *BlockIO {
+func NewBlockIO(ctx *t_config.Context) *BlockIO {
 	return &BlockIO{
-		hash: hash,
-		path: path.Join(ctx.DataDir, hex.EncodeToString(hash)),
 		ctx:  ctx,
 	}
 }
 
-func (b *BlockIO) Write(block *block.Block) error {
-	b.block = block
-	f, err := os.OpenFile(b.path, os.O_CREATE|os.O_RDWR, 0644)
+func (b *BlockIO) Write(block *block.Block, hash []byte) error {
+
+	f, err := os.OpenFile(path.Join(b.ctx.DataDir, hex.EncodeToString(hash)), os.O_CREATE|os.O_RDWR, 0644)
 
 	if err != nil {
 		return err
 	}
-	b.bytes = b.block.Serialize()
-	n, err := f.Write(b.bytes)
+	_bytes := block.Serialize()
+	n, err := f.Write(_bytes)
 	t_error.LogErr(err)
 
-	b.Checksum()
-	f.WriteAt(b.sum, int64(n))
+	sum := b.Checksum(_bytes)
+	f.WriteAt(sum, int64(n))
 	return nil
 }
 
-func (b *BlockIO) Read() error {
+func (b *BlockIO) Read(hash []byte) *block.Block {
 
-	_bytes, err := os.ReadFile(b.path)
+	allBytes, err := os.ReadFile(path.Join(b.ctx.DataDir, hex.EncodeToString(hash)))
 	t_error.LogErr(err)
-	b.bytes = _bytes[:len(_bytes)-32]
-	b.sum = _bytes[len(_bytes)-32:]
+	dataBytes := allBytes[:len(allBytes)-32]
+	sum := allBytes[len(allBytes)-32:]
 
-	valid := b.Check()
+	valid := b.Check(dataBytes, sum)
 
 	if !valid {
-		return CorruptBlockErr{}
+		t_error.LogErr(CorruptBlockErr{})
 	}
 
-	blockDecoder := block.NewBlockDecoder(b.block)
+	blockDecoder := block.NewBlockDecoder(nil)
 	buffer := bytes.Buffer{}
-	buffer.Write(b.bytes)
+	buffer.Write(dataBytes)
 	blockDecoder.Decode(&buffer)
 
-	return nil
+	return blockDecoder.Out()
 }
 
-func (b *BlockIO) Checksum() {
-	sum := sha256.Sum256(b.bytes)
-	b.sum = sum[:]
+
+
+func (b *BlockIO) Checksum(blockBytes []byte) []byte {
+	sum := sha256.Sum256(blockBytes)
+	return sum[:]
 }
 
-func (b *BlockIO) Check() bool {
-	expected := sha256.Sum256(b.bytes)
-	expectedSum := big.Int{}
-	expectedSum.SetBytes(expected[:])
+func (b *BlockIO) Check(_bytes, sum []byte) bool {
+	expected := sha256.Sum256(_bytes)
 
-	actualSum := big.Int{}
-	actualSum.SetBytes(b.sum)
-
-	return expectedSum.Cmp(&actualSum) == 0
+	return bytes.Equal(expected[:], sum)
 
 }
 
-func (b *BlockIO) Update(block *block.Block) error {
-	b.Write(block)
-	return nil
+func (b *BlockIO) Update(block *block.Block, hash []byte)  {
+	b.Delete(hash)
+	b.Write(block, hash)
 }
 
-func (b *BlockIO) Delete() error {
-	os.Remove(b.path)
-	return nil
+func (b *BlockIO) Delete(hash []byte) {
+	path := path.Join(b.ctx.DataDir, hex.EncodeToString(hash))
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		t_error.LogWarn(errors.New("file does not exist, cant delete"))
+		return
+	} 
+	t_error.LogErr(os.Remove(path))
 }
 
-func (b *BlockIO) Block() *block.Block {
-	return b.block
-}

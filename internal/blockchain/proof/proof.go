@@ -2,6 +2,7 @@ package proof
 
 import (
 	"math/big"
+
 	"github.com/terium-project/terium/internal/block"
 	"github.com/terium-project/terium/internal/t_error"
 )
@@ -22,51 +23,47 @@ type PoWStateNotifier chan PoWState
 
 
 type PoW struct {
-	block *block.Block
-	notifier PoWStateNotifier
+	Notifier PoWStateNotifier
 }
 
-func NewPoW(block *block.Block) PoW {
-	return PoW{block: block, notifier: make(chan PoWState)}
+func NewPoW() *PoW {
+	return &PoW{Notifier: make(chan PoWState)}
 }
 
-func (pow PoW) Solve(quitSig <-chan byte, ackChan chan<- byte) {
+func (pow *PoW) Solve(block *block.Block, restart chan byte) bool {
 
-	var hash big.Int
+	hash := new(big.Int)
 	state := PoWState{Nonce: 0, Solved: false}
 
 	for state.Nonce < (1<<32 - 1) {
 		select {
-		case <-quitSig :
-			ackChan<-0x00
-			return
+		case <-restart :
+			return false
 		default : 
-			pow.block.Header.Nonce = state.Nonce
-			hash.SetBytes(pow.block.Hash())
+			block.Header.Nonce = state.Nonce
+			hash.SetBytes(block.Hash())
 
 			state.Hash = hash.Bytes()
 
-			if pow.verifyHash(hash) {
+			if pow.Validate(block.Header.Target, state.Hash) {
 				state.Solved = true
-				pow.notifier <- state
-				return
+				pow.Notifier <- state
+				return  true
 			}
-			pow.notifier <- state
+			pow.Notifier <- state
 			state.Nonce++
 		}
 	}
 	
 	t_error.LogErr(NoNonceError{})
+	return false
 }
 
-func (pow PoW) Validate() bool {
+func (pow *PoW) Validate(target big.Int, hash []byte) bool {
 
-	var hash big.Int
-	hash.SetBytes(pow.block.Hash())
-	pow.notifier<-PoWState{Hash: hash.Bytes()}
-	return pow.verifyHash(hash)
-} 
+	return target.Cmp(new(big.Int).SetBytes(hash)) == 1
+}
 
-func (pow PoW) verifyHash(hash big.Int) bool {
-	return pow.block.Header.Target.Cmp(&hash) == 1
+func (pow *PoW) Close() {
+	close(pow.Notifier)
 }

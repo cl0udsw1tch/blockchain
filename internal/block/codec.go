@@ -29,13 +29,13 @@ type HeaderDecoder struct {
 }
 
 func NewHeaderDecoder(header *Header) *HeaderDecoder {
-	dec := HeaderDecoder{}
+	dec := new(HeaderDecoder)
 	if header == nil {	
-		dec.header = &Header{}
+		dec.header = new(Header)
 	} else {
 		dec.header = header
 	}
-	return &dec
+	return dec
 }
 
 func (d *HeaderDecoder) Clear() {
@@ -70,14 +70,17 @@ type HeaderEncoder struct {
 }
 
 func NewHeaderEncoder(buffer *bytes.Buffer) *HeaderEncoder {
-	enc := HeaderEncoder{
-		buffer: buffer,
+	enc := new(HeaderEncoder)
+	if buffer == nil {	
+		enc.buffer = new(bytes.Buffer)
+	} else {
+		enc.buffer = buffer
 	}
-	return &enc
+	return enc
 }
 
 func (e *HeaderEncoder) Clear() {
-	e.buffer = &bytes.Buffer{}
+	e.buffer = new(bytes.Buffer)
 }
 
 func (e *HeaderEncoder) Encode(header *Header) {
@@ -104,17 +107,17 @@ type BlockDecoder struct {
 }
 
 func NewBlockDecoder(block *Block) *BlockDecoder {
-	dec := BlockDecoder{}
+	dec := new(BlockDecoder)
 	if block == nil {	
-		dec.block = &Block{}
+		dec.block = new(Block)
 	} else {
 		dec.block = block
 	}
-	return &dec
+	return dec
 }
 
 func (d *BlockDecoder) Clear() {
-	d.block = &Block{}
+	d.block = new(Block)
 }
 
 func (d *BlockDecoder) Decode(buffer *bytes.Buffer) error {
@@ -154,14 +157,17 @@ type BlockEncoder struct {
 }
 
 func NewBlockEncoder(buffer *bytes.Buffer) *BlockEncoder {
-	enc := BlockEncoder{
-		buffer: buffer,
+	enc := new(BlockEncoder)
+	if buffer == nil {	
+		enc.buffer = new(bytes.Buffer)
+	} else {
+		enc.buffer = buffer
 	}
-	return &enc
+	return enc
 }
 
 func (e *BlockEncoder) Clear(){
-	e.buffer = &bytes.Buffer{}
+	e.buffer = new(bytes.Buffer)
 }
 
 func (e *BlockEncoder) Encode(block *Block) {

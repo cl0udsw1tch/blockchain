@@ -3,6 +3,7 @@ package t_error
 import (
 	"fmt"
 	"log"
+	"runtime/debug"
 )
 
 func LogWarn(err error) {
@@ -12,7 +13,8 @@ func LogWarn(err error) {
 }
 func LogErr(err error){
 	if err != nil {
-		log.Panic(err.Error())
+		debug.PrintStack()
+		log.Fatal(err.Error())
 	}
 }
 

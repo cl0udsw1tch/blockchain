@@ -3,10 +3,11 @@ package blockStore
 import (
 	"bytes"
 	"encoding/gob"
+	"errors"
 	"math/big"
 	"path"
-	"github.com/terium-project/terium/internal/t_config"
 	"github.com/dgraph-io/badger/v4"
+	"github.com/terium-project/terium/internal/t_config"
 	"github.com/terium-project/terium/internal/t_error"
 )
 
@@ -16,27 +17,23 @@ type __metadata__ struct {
 }
 type IndexIO struct {
 	db       *badger.DB
-	hash     []byte
-	metadata *__metadata__
 	ctx      *t_config.Context
 }
 
-func NewIndexIO(ctx *t_config.Context, hash []byte) *IndexIO {
+func NewIndexIO(ctx *t_config.Context) *IndexIO {
 
-	i := IndexIO{
-		hash: hash,
-		ctx:  ctx,
-	}
-
-	db, err := badger.Open(badger.DefaultOptions(path.Join(ctx.IndexDir, "blockIndex.db")))
+	i := new(IndexIO)
+	opts := badger.DefaultOptions(path.Join(ctx.IndexDir, "blockIndex"))
+	opts.Logger = nil
+	db, err := badger.Open(opts)
 	t_error.LogErr(err)
-
+	i.ctx = ctx
 	i.db = db
-	return &i
-
+	return i
 }
 
-func (store *IndexIO) ReadLastHash() {
+func (store *IndexIO) ReadLast() (*BlockMetaData, error) {
+	var hash []byte
 	err := store.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte("lastHash"))
 		if err != nil {
@@ -45,7 +42,7 @@ func (store *IndexIO) ReadLastHash() {
 		err = item.Value(func(val []byte) error {
 			buffer := bytes.Buffer{}
 			buffer.Write(val)
-			store.hash = buffer.Bytes()
+			hash = buffer.Bytes()
 			return nil
 		})
 		if err != nil {
@@ -53,13 +50,37 @@ func (store *IndexIO) ReadLastHash() {
 		}
 		return nil
 	})
-	t_error.LogErr(err)
-	store.Read()
+	if err == badger.ErrKeyNotFound {
+		return nil, err
+	}
+	meta := store.Read(hash)
+	return &BlockMetaData{Hash: hash, Nonce: meta.Nonce, Height: meta.Height}, nil
 }
 
-func (store *IndexIO) WriteLastHash() {
+func (store *IndexIO) Write(meta *BlockMetaData) {
+	hash := meta.Hash
+	__meta := __metadata__{
+		Nonce: meta.Nonce,
+		Height: meta.Height,
+	}
 	err := store.db.Update(func(txn *badger.Txn) error {
-		err := txn.Set([]byte("lastHash"), store.hash)
+
+		buffer := bytes.Buffer{}
+		enc := gob.NewEncoder(&buffer)
+		enc.Encode(__meta)
+		err := txn.Set(hash, buffer.Bytes())
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	t_error.LogErr(err)
+	store.WriteLastHash(hash)
+}
+
+func (store *IndexIO) WriteLastHash(hash []byte) {
+	err := store.db.Update(func(txn *badger.Txn) error {
+		err := txn.Set([]byte("lastHash"), hash)
 		if err != nil {
 			return err
 		}
@@ -68,24 +89,20 @@ func (store *IndexIO) WriteLastHash() {
 	t_error.LogErr(err)
 }
 
-func (store *IndexIO) Create(metadata *BlockMetaData) {
-	store.writeMeta()
-}
-
-func (store *IndexIO) Read() {
+func (store *IndexIO) Read(hash []byte) *__metadata__ {
+	metadata := new(__metadata__)
 	err := store.db.View(func(txn *badger.Txn) error {
 
-		item, err := txn.Get(store.hash)
+		item, err := txn.Get(hash)
 
 		if err != nil {
 			return err
 		}
-
 		item.Value(func(val []byte) error {
 			buffer := bytes.Buffer{}
 			buffer.Write(val)
 			dec := gob.NewDecoder(&buffer)
-			dec.Decode(store.metadata)
+			dec.Decode(metadata)
 			return nil
 		})
 
@@ -93,19 +110,19 @@ func (store *IndexIO) Read() {
 	})
 
 	t_error.LogErr(err)
+	return metadata
 }
 
-func (store *IndexIO) Update(metadata *BlockMetaData) {
-	store.setMeta(metadata)
-	store.writeMeta()
-}
 
-func (store *IndexIO) Delete() {
+func (store *IndexIO) Delete(hash []byte) {
 	err := store.db.Update(func(txn *badger.Txn) error {
-		return txn.Delete(store.hash)
+		return txn.Delete(hash)
 	})
-
-	t_error.LogErr(err)
+	if err != badger.ErrKeyNotFound {
+		t_error.LogErr(err)
+	} else {
+		t_error.LogWarn(errors.New("key not found, nothing to do"))
+	}
 }
 
 func (store *IndexIO) Close() {
@@ -114,35 +131,11 @@ func (store *IndexIO) Close() {
 	}
 }
 
-func (store *IndexIO) MetaData() *BlockMetaData {
-	metadata := BlockMetaData{
-		Hash:   store.hash,
-		Nonce:  store.metadata.Nonce,
-		Height: store.metadata.Height,
-	}
-	return &metadata
-}
-
-// private
-
-func (store *IndexIO) setMeta(metadata *BlockMetaData) {
-
-	store.metadata = &__metadata__{
+func (store *IndexIO) MetaData(hash []byte, metadata *__metadata__) *BlockMetaData {
+	_metadata := BlockMetaData{
+		Hash:   hash,
 		Nonce:  metadata.Nonce,
 		Height: metadata.Height,
 	}
-}
-func (store *IndexIO) writeMeta() {
-	err := store.db.Update(func(txn *badger.Txn) error {
-
-		buffer := bytes.Buffer{}
-		enc := gob.NewEncoder(&buffer)
-		enc.Encode(store.metadata)
-		err := txn.Set(store.hash, buffer.Bytes())
-		if err != nil {
-			return err
-		}
-		return nil
-	})
-	t_error.LogErr(err)
+	return &_metadata
 }

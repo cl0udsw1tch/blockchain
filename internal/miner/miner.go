@@ -1,16 +1,18 @@
 package miner
 
 import (
-	"sync"
+	"errors"
+	"fmt"
+	"os"
 	"time"
-	"github.com/terium-project/terium/internal/t_config"
+
 	"github.com/terium-project/terium/internal/block"
 	"github.com/terium-project/terium/internal/blockchain"
 	"github.com/terium-project/terium/internal/blockchain/proof"
 	"github.com/terium-project/terium/internal/mempool"
+	"github.com/terium-project/terium/internal/t_config"
+	"github.com/terium-project/terium/internal/t_error"
 	"github.com/terium-project/terium/internal/transaction"
-	"github.com/terium-project/terium/internal/utxoSet"
-	"github.com/terium-project/terium/internal/validator"
 )
 
 type Miner struct {
@@ -18,17 +20,23 @@ type Miner struct {
 	block       *block.Block
 	ctx         *t_config.Context
 	blockchain  *blockchain.Blockchain
-	txValidator *validator.TxValidator
+	pow         *proof.PoW
+	Signal      *MinerSignal
 }
 
-func NewMiner(ctx *t_config.Context) *Miner {
+func NewMiner(ctx *t_config.Context, blockchain *blockchain.Blockchain, mempool *mempool.MempoolIO) *Miner {
 
 	miner := new(Miner)
 	miner.ctx = ctx
-	miner.blockchain = blockchain.NewBlockchain(ctx)
-	miner.txValidator = validator.NewTxValidator(ctx)
-	miner.mempool = mempool.NewMempoolIO(ctx)
+	miner.mempool = mempool
+	miner.Signal = NewMinerSignal()
+	miner.blockchain = blockchain
+
 	return miner
+}
+
+func (miner *Miner) SetBlock(block *block.Block) {
+	miner.block = block
 }
 
 func (miner *Miner) Block() *block.Block {
@@ -36,19 +44,24 @@ func (miner *Miner) Block() *block.Block {
 }
 
 func (miner *Miner) Genesis() {
+
+	if miner.blockchain.LastMeta() != nil {
+		t_error.LogWarn(errors.New("blockchain already exists, wont create genesis block"))
+		os.Exit(1)
+	}
 	genesis := block.Block{
 		Header: block.Header{
 			Version:   t_config.Version,
 			PrevHash:  []byte{},
 			TimeStamp: uint32(time.Now().Unix()),
-			Target:    t_config.Target,
+			Target:    *t_config.Target,
 		},
 		TXCount:      0,
 		Transactions: nil,
 	}
 	miner.block = &genesis
-	miner.Mine()
-	miner.blockchain.AddBlock(miner.block)
+	miner.Mine(nil)
+	miner.blockchain.AddGenesis(miner.block)
 }
 
 func (miner *Miner) CreateBlock(coinbaseSript [][]byte) {
@@ -62,8 +75,8 @@ func (miner *Miner) CreateBlock(coinbaseSript [][]byte) {
 
 	header := block.Header{
 		Version:   t_config.Version,
-		PrevHash:  miner.blockchain.LastHash(),
-		Target:    t_config.Target,
+		PrevHash:  miner.blockchain.LastMeta().Hash,
+		Target:    *t_config.Target,
 		TimeStamp: uint32(time.Now().Unix()),
 	}
 
@@ -74,14 +87,79 @@ func (miner *Miner) CreateBlock(coinbaseSript [][]byte) {
 	}
 }
 
-func (miner *Miner) MonitorMempool() {
-	txs := []transaction.Tx{}
-	for len(txs) == 0 {
-		time.Sleep(time.Millisecond * 10)
-		miner.mempool.GetTxByPriority(int64(*miner.ctx.NodeConfig.NumTxInBlock))
+type MineSignal struct {
+	Stop   chan byte
+	Resume chan byte
+}
+
+func (s *MineSignal) SignalStop() {
+	s.Stop <- 0x00
+}
+
+func (s *MineSignal) SignalResume() {
+	s.Resume <- 0x00
+}
+
+type SolveSignal struct {
+	Ready chan byte
+	Reset chan byte
+}
+
+func (s *SolveSignal) SignalReady() {
+	s.Ready <- 0x00
+}
+
+func (s *SolveSignal) SignalReset() {
+	s.Reset <- 0x00
+}
+
+type MinerSignal struct {
+	MineSignal  MineSignal
+	SolveSignal SolveSignal
+}
+
+func NewMinerSignal() *MinerSignal {
+
+	m := &MinerSignal{
+		MineSignal: MineSignal{
+			Stop:   make(chan byte, 1),
+			Resume: make(chan byte, 1)},
+		SolveSignal: SolveSignal{
+			Ready: make(chan byte, 1),
+			Reset: make(chan byte, 1)},
 	}
-	for _, tx := range txs {
-		miner.AddTxToBlock(&tx)
+	return m
+}
+
+func (s *MinerSignal) Pause() {
+	s.MineSignal.SignalStop()
+	s.SolveSignal.SignalReset()
+}
+func (s *MinerSignal) Resume() {
+	s.MineSignal.SignalResume()
+}
+
+func (miner *Miner) MineFromMempool() {
+
+	for {
+		select {
+		case <-miner.Signal.MineSignal.Stop:
+			<-miner.Signal.MineSignal.Resume
+		default:
+			time.Sleep(time.Millisecond * 10)
+			txs := miner.mempool.GetTxByPriority(int64(*miner.ctx.NodeConfig.NumTxInBlock))
+			if len(txs) == int(*miner.ctx.NodeConfig.NumTxInBlock) {
+				for _, tx := range txs {
+					miner.AddTxToBlock(&tx)
+				}
+
+				// where this node attempts to mine the block
+				if miner.Mine(miner.Signal.SolveSignal.Reset) {
+					miner.Signal.SolveSignal.SignalReady()
+					miner.AddBlock(miner.block)
+				}
+			}
+		}
 	}
 }
 
@@ -90,51 +168,32 @@ func (miner *Miner) AddTxToBlock(tx *transaction.Tx) {
 	miner.block.TXCount++
 }
 
-func (miner *Miner) AddBlock(quitSig <-chan byte, ackChan chan<- byte) {
-	
-	miner.Mine(quitSig, ackChan)
-	miner.blockchain.AddBlock(miner.block)
-	miner.UpdateUtxoSet()
+// adds block to blockchain, updates UTXO set
+func (miner *Miner) AddBlock(block *block.Block) {
+	miner.blockchain.AddBlock(block)
+
 }
 
-func (miner *Miner) Mine(quitSig <-chan byte, ackChan chan<- byte) {
+func (miner *Miner) Mine(quit chan byte) bool {
+	miner.pow = proof.NewPoW()
+	defer miner.pow.Close()
 	miner.block.Header.TimeStamp = uint32(time.Now().Unix())
 	miner.block.Header.MerkleRootHash = miner.block.MerkelRoot()
-	pow := proof.NewPoW(miner.block)
-	pow.Solve(quitSig, ackChan)
+	go func(){
+		for state := range miner.pow.Notifier {
+			fmt.Printf("\rNonce: %X\tHash: %X\t Solved: %t", state.Nonce, state.Hash, state.Solved)
+			if state.Solved {
+				var s string
+				for _, n := range(state.Hash) {
+					s += fmt.Sprintf("%08b", n)
+				}
+				fmt.Printf("\n\nBinary:\n%0*s", 256, s)
+			}
+		}
+	}()
+	return miner.pow.Solve(miner.block, quit)
 }
 
-func (miner *Miner) UpdateUtxoSet() {
-	if miner.block.Transactions == nil {
-		return
-	}
-	wg := sync.WaitGroup{}
-	utxoStore := utxoSet.NewUtxoStore(miner.ctx)
-	defer utxoStore.Close()
-	for _, tx := range miner.block.Transactions {
-		wg.Add(1)
-		go func(tx *transaction.Tx) {
-			defer wg.Done()
-			for idx, out := range tx.Outputs {
-				wg.Add(1)
-				go func(out *transaction.TxOut, idx int32) {
-					defer wg.Done()
-					utxo := transaction.Utxo{
-						OutRef: transaction.OutPoint{
-							TxId: tx.Hash(),
-							Idx:  idx,
-						},
-						Value:             out.Value,
-						LockingScriptSize: out.LockingScriptSize,
-						LockingScript:     out.LockingScript,
-					}
-					utxoStore.Write(&utxo)
-				}(&out, int32(idx))
-			}
-		}(&tx)
-	}
-	wg.Wait()
-}
 
 func (miner *Miner) CoinbaseTx(
 	version uint32,

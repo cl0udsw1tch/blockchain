@@ -25,7 +25,7 @@ func NewTxIndexIO(ctx *t_config.Context) *TxIndexIO {
 	io := TxIndexIO{}
 	io.ctx = ctx
 	var err error
-	io.db, err = badger.Open(badger.DefaultOptions(path.Join(ctx.IndexDir, "txIndex.db")))
+	io.db, err = badger.Open(badger.DefaultOptions(path.Join(ctx.IndexDir, "txIndex")))
 	t_error.LogErr(err)
 	return &io
 }

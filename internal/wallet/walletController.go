@@ -3,10 +3,11 @@ package wallet
 import (
 	"bytes"
 	"encoding/hex"
-	"errors"
 	"sync"
-	"github.com/terium-project/terium/internal/t_config"
+
 	"github.com/terium-project/terium/internal/client"
+	"github.com/terium-project/terium/internal/server"
+	"github.com/terium-project/terium/internal/t_config"
 	"github.com/terium-project/terium/internal/t_error"
 	"github.com/terium-project/terium/internal/t_util"
 	"github.com/terium-project/terium/internal/transaction"
@@ -16,13 +17,33 @@ import (
 type WalletController struct {
 	wallet *Wallet
 	ctx    *t_config.Context
+	server *server.Server
 }
 
 func NewWalletController(wallet *Wallet, ctx *t_config.Context) *WalletController {
 	w := new(WalletController)
 	w.wallet = wallet
 	w.ctx = ctx
+	w.server = server.NewServer(ctx)
 	return w
+}
+
+func (w *WalletController) GetOutPointsUntil(sum int64) []transaction.OutPoint {
+
+	store := utxoSet.NewUtxoStore(w.ctx)
+	defer store.Close()
+	utxos := store.FindUTXOsByAddr(w.wallet.ClientId.Address)
+	r := []transaction.OutPoint{}
+
+	var currSum int64 = 0
+	for _, utxo := range utxos {
+		r = append(r, utxo.OutPoint)
+		currSum += utxo.Value
+		if currSum > sum {
+			break
+		}
+	}
+	return r
 }
 
 func (w *WalletController) GenP2PKH(
@@ -31,6 +52,14 @@ func (w *WalletController) GenP2PKH(
 	recipientVal []int64,
 	sigHashFlags []byte,
 	locktime uint32) *transaction.Tx {
+
+	var sum int64 = 0
+	for _, v := range recipientVal {
+		sum += v
+	}
+	if utxoOutPoints == nil {
+		utxoOutPoints = w.GetOutPointsUntil(sum)
+	}
 
 	nIn := len(utxoOutPoints)
 	nOut := len(recipientAddrs)
@@ -112,8 +141,13 @@ func (w *WalletController) SignTx(
 	inUTXO []*transaction.Utxo,
 	sigHashFlags []byte,
 ) {
+	 
 	for i := range inUTXO {
-		w.SignTxIn(tx, uint8(len(inUTXO)), inUTXO[i], sigHashFlags[i])
+		if sigHashFlags != nil {
+			w.SignTxIn(tx, uint8(len(inUTXO)), inUTXO[i], sigHashFlags[i])
+		} else {
+			w.SignTxIn(tx, uint8(len(inUTXO)), inUTXO[i], byte(transaction.SIGHASH_ALL))
+		}
 	}
 }
 
@@ -122,14 +156,14 @@ func (w *WalletController) Balance() int64 {
 	store := utxoSet.NewUtxoStore(w.ctx)
 	defer store.Close()
 	utxos := store.FindUTXOsByAddr(w.wallet.ClientId.Address)
-	for elem := utxos.Front(); elem != nil; elem.Next() {
-		utxo, ok := elem.Value.(transaction.Utxo)
-		if !ok {
-			t_error.LogErr(errors.New("bad utxo"))
-		}
+	for _, utxo := range utxos {
 		sum += utxo.Value
 	}
 	return sum
+}
+
+func (w *WalletController) BroadcastTx(tx *transaction.Tx) {
+	w.server.Tx().InStream <- tx
 }
 
 func ValidateAddress(hexxAddr string) bool {
@@ -140,3 +174,5 @@ func ValidateAddress(hexxAddr string) bool {
 	t_error.LogErr(err)
 	return bytes.Equal(t_util.Hash256(addrbytes[:len(addrbytes)-4])[:4], addrbytes[len(addrbytes)-4:])
 }
+
+

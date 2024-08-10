@@ -45,7 +45,7 @@ func MerkelRoot(nodes [][]byte) []byte {
 
 func (block Block) MerkelRoot() []byte {
 	bits := make([][]byte, len(block.Transactions))
-	e := transaction.TxEncoder{}
+	e := transaction.NewTxEncoder(nil)
 	for i, tx := range block.Transactions {
 		e.Encode(&tx)
 		bits[i] = e.Bytes()
@@ -55,13 +55,13 @@ func (block Block) MerkelRoot() []byte {
 }
 
 func (block Block) Hash() []byte {
-	e := HeaderEncoder{}
+	e := NewHeaderEncoder(nil)
 	e.Encode(&block.Header)
 	return t_util.Hash256(e.Bytes()) 
 }
 
 func (block Block) Serialize() []byte {
-	e := BlockEncoder{}
+	e := NewBlockEncoder(nil)
 	e.Encode(&block)
 	return e.Bytes()
 }

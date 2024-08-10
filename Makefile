@@ -1,23 +1,25 @@
 # Variables
-APP_NAME := terium_node
+APP_NAME := terium
 CMD_DIR := ./cmd/app
 BIN_DIR := ./bin
-SRC_FILE := $(CMD_DIR)/main.go
+MAIN_FILE := $(CMD_DIR)/main.go
 OUTPUT_FILE := $(BIN_DIR)/$(APP_NAME)
 GO := go
+GOFILES := $(shell find . -name '*.go')
+
 
 # Default target
 .PHONY: all
 all: build
-
+	
 # Build the application
 .PHONY: build
 build: $(OUTPUT_FILE)
 
-$(OUTPUT_FILE): $(SRC_FILE)
+$(OUTPUT_FILE): $(GOFILES)
 	@echo "Building $(APP_NAME)..."
 	@mkdir -p $(BIN_DIR)
-	$(GO) build -o $@ $^
+	$(GO) build -o ./bin/$(APP_NAME) ./cmd/app
 	@echo "Build completed: $@"
 
 # Run the application
@@ -60,3 +62,25 @@ lint:
 	@echo "Linting code..."
 	$(GO) vet ./...
 	@echo "Lint completed."
+
+.PHONY: setup
+
+setup: 
+	@if [ ! -d $(HOME)/terium ]; then \
+	mkdir $(HOME)/terium; \
+	fi
+	@if [ ! -d $(HOME)/terium/.data ]; then \
+	mkdir $(HOME)/terium/.data; \
+	fi
+	@if [ ! -d $(HOME)/terium/.tmp ]; then \
+	mkdir $(HOME)/terium/.tmp; \
+	fi
+	@if [ ! -d $(HOME)/terium/wallets ]; then \
+	mkdir $(HOME)/terium/wallets; \
+	fi
+	@if [ ! -f $(HOME)/terium/config.json ]; then \
+	echo '{}' > $(HOME)/terium/config.json; \
+	fi
+	@if [ ! -d $(HOME)/terium/.data/index ]; then \
+	mkdir $(HOME)/terium/.data/index; \
+	fi

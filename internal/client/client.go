@@ -9,7 +9,7 @@ import (
 
 type ClientId struct {
 	PrivateKey *ecdsa.PrivateKey
-	PublicKey  *ecdsa.PublicKey 
+	PublicKey  *ecdsa.PublicKey
 	PubKeyHash []byte // 20 bytes
 	Address    string // 25 bytes
 }
@@ -23,17 +23,22 @@ func NewClientId() *ClientId {
 	return &a
 }
 
-
-func (a *ClientId) Init(priv []byte) {
+func GetClientId(priv []byte, pub []byte) *ClientId {
+	a := new(ClientId)
 	a.PrivateKey = UnMarshalPrivKey(priv)
-	a.PublicKey = GetPublicKey(a.PrivateKey)
+	if pub == nil {
+		a.PublicKey = GetPublicKey(a.PrivateKey)
+	} else {
+		a.PublicKey = UnMarshalPubKey(pub)
+	}
 	a.PubKeyHash = HashPublicKey(a.PublicKey)
 	a.Address = MakeAddress(a.PubKeyHash)
+	return a
 }
+
 func (a *ClientId) Sign(msgHash []byte) []byte {
 	r, err := ecdsa.SignASN1(rand.Reader, a.PrivateKey, msgHash)
 	t_error.LogErr(err)
 	return r
-	
-}
 
+}

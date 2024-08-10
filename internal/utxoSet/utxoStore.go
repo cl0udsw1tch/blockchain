@@ -3,9 +3,11 @@ package utxoSet
 import (
 	"bytes"
 	"container/list"
+	"errors"
 	"path"
-	"github.com/terium-project/terium/internal/t_config"
+
 	"github.com/dgraph-io/badger/v4"
+	"github.com/terium-project/terium/internal/t_config"
 	"github.com/terium-project/terium/internal/t_error"
 	"github.com/terium-project/terium/internal/transaction"
 )
@@ -19,7 +21,9 @@ func NewUtxoStore(ctx *t_config.Context) *UtxoStore {
 	store := new(UtxoStore)
 	store.ctx = ctx
 	var err error
-	store.db, err = badger.Open(badger.DefaultOptions(path.Join(ctx.DataDir, "utxoSet.db")))
+	opts := badger.DefaultOptions(path.Join(ctx.DataDir, "utxoSet"))
+	opts.Logger = nil
+	store.db, err = badger.Open(opts)
 	t_error.LogErr(err)
 	return store
 }
@@ -85,10 +89,11 @@ func (store *UtxoStore) Delete(pt *transaction.OutPoint) {
 	t_error.LogErr(err)
 }
 
-func (store *UtxoStore) FindUTXOsByAddr(addrHex string) *list.List {
+func (store *UtxoStore) FindUTXOsByAddr(addrHex string) []transaction.Utxo {
 	utxos := list.New()
 	err := store.db.View(func(txn *badger.Txn) error {
 		iter := txn.NewIterator(badger.DefaultIteratorOptions)
+		defer iter.Close()
 		utxoDec := transaction.NewUtxoDecoder(nil)
 		buffer := bytes.Buffer{}
 		for iter.Rewind(); iter.Valid(); iter.Next() {
@@ -112,5 +117,18 @@ func (store *UtxoStore) FindUTXOsByAddr(addrHex string) *list.List {
 		return nil
 	})
 	t_error.LogErr(err)
-	return utxos
+	utxoSlice := make([]transaction.Utxo, utxos.Len())
+	curr := utxos.Front()
+	i := 0
+	for curr != nil {
+
+		currVal, ok := curr.Value.(*transaction.Utxo)
+		if !ok {
+			t_error.LogErr(errors.New("bad utxo format in mempool"))
+		}
+		utxoSlice[i] = *currVal
+		curr = curr.Next()
+		i++
+	}
+	return utxoSlice
 }
