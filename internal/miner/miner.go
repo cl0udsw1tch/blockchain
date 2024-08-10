@@ -1,6 +1,7 @@
 package miner
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -181,7 +182,7 @@ func (miner *Miner) Mine(quit chan byte) bool {
 	miner.block.Header.MerkleRootHash = miner.block.MerkelRoot()
 	go func(){
 		for state := range miner.pow.Notifier {
-			fmt.Printf("\rNonce: %X\tHash: %X\t Solved: %t", state.Nonce, state.Hash, state.Solved)
+			fmt.Printf("\rNonce: %X\tHash: %s\t Solved: %t", state.Nonce, hex.EncodeToString(state.Hash), state.Solved)
 			if state.Solved {
 				var s string
 				for _, n := range(state.Hash) {

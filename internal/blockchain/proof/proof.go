@@ -32,7 +32,6 @@ func NewPoW() *PoW {
 
 func (pow *PoW) Solve(block *block.Block, restart chan byte) bool {
 
-	hash := new(big.Int)
 	state := PoWState{Nonce: 0, Solved: false}
 
 	for state.Nonce < (1<<32 - 1) {
@@ -41,9 +40,7 @@ func (pow *PoW) Solve(block *block.Block, restart chan byte) bool {
 			return false
 		default : 
 			block.Header.Nonce = state.Nonce
-			hash.SetBytes(block.Hash())
-
-			state.Hash = hash.Bytes()
+			state.Hash = block.Hash()
 
 			if pow.Validate(block.Header.Target, state.Hash) {
 				state.Solved = true
