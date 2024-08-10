@@ -29,7 +29,7 @@ func NewNetwork(ctx *t_config.Context) *Network {
 	f, err := os.OpenFile(tablePath, os.O_CREATE | os.O_APPEND | os.O_WRONLY, 0666)
 	t_error.LogErr(err)
 	defer f.Close()
-	f.WriteString(fmt.Sprint(ctx.NodeConfig.RpcEndpointPort) + "\n")
+	f.WriteString(fmt.Sprintf("%d\n", *ctx.NodeConfig.RpcEndpointPort))
 	
 	return network
 }
@@ -37,11 +37,11 @@ func NewNetwork(ctx *t_config.Context) *Network {
 // to replaced by P2P module
 func (network *Network) Listen() {
 
-	listener, err := net.Listen("tcp", ":" + fmt.Sprint(network.ctx.NodeConfig.RpcEndpointPort))
+	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", *network.ctx.NodeConfig.RpcEndpointPort))
 	t_error.LogErr(err)
 
 	defer listener.Close()
-	fmt.Println("Server listening on port " +  fmt.Sprint(network.ctx.NodeConfig.RpcEndpointPort))
+	fmt.Println("Server listening on port " +  fmt.Sprint(network.ctx.NodeConfig.RpcEndpointPort) + "\n")
 
 	for {
 		conn, err := listener.Accept()
@@ -56,10 +56,14 @@ func (network *Network) handleConn(conn net.Conn) {
 
 	fmt.Println("New client connected: ", conn.RemoteAddr().String())
 
-	var b []byte
-	_, err := conn.Read(b)
-	t_error.LogErr(err)
-	network.istream <- b
+	for {
+		var b []byte = make([]byte, 1024)
+		n, err := conn.Read(b)
+		if err != nil {
+			return
+		}
+		network.istream <- b[:n]
+	}
 
 }
 
@@ -75,7 +79,7 @@ func (network *Network) Broadcast() {
 
 	for scanner.Scan() {
 		port := scanner.Text()
-		conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%s", port))
+		conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%s", port))
 		t_error.LogErr(err)
 		defer conn.Close()
 	

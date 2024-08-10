@@ -112,29 +112,21 @@ func (v *TxValidator) assertSpentCoinbaseMaturity() bool {
 
 func (v *TxValidator) assertSigScriptSyntax() bool {
 	for _, in := range v.tx.Inputs {
-		if len(in.UnlockingScript)%3 != 0 { // push, sz, bytes ...
-			return false
-		}
 		i := 0
 		for i < len(in.UnlockingScript) {
-			code := in.UnlockingScript[i]
-			if len(code) != 1 {
-				return false
-			}
-			_code := transaction.OpCode(in.UnlockingScript[i][0])
+			_code := transaction.OpCode(in.UnlockingScript[i])
 			nSz, ok := transaction.OpPushMap[_code]
 			if !ok {
 				return false
 			}
-			if len(in.UnlockingScript[i+1]) != nSz {
+			i++
+			sz := binary.BigEndian.Uint32(in.UnlockingScript[i:nSz])
+			i+=nSz
+
+			if len(in.UnlockingScript) - i != int(sz) {
 				return false
 			}
-			sz := binary.BigEndian.Uint32(in.UnlockingScript[i+1])
-			b := in.UnlockingScript[i+2]
-			if len(b) != int(sz) {
-				return false
-			}
-			i += 3
+			i += int(sz)
 		}
 	}
 	return true

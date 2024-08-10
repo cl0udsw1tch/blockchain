@@ -23,6 +23,9 @@ import (
 	"github.com/terium-project/terium/internal/wallet"
 )
 
+const green string = "\033[33m" 
+const reset string = "\033[0m"
+
 type CommandLine struct{
 	ctx *t_config.Context
 }
@@ -64,7 +67,6 @@ func (cli *CommandLine) PrintUsage() {
 	fmt.Println("update")
 	fmt.Printf("%-20s%-30s%s", "--print", "| -p", "Print the block header hashes of the main branch\n")
 
-	os.Exit(1)
 }
 
 func (cli *CommandLine) ValidateArgs() {
@@ -106,7 +108,7 @@ func (cli *CommandLine) Run() {
 	flag.CommandLine.Parse(os.Args[2:])
 
 
-	if len(flag.Args()) != 1 {
+	if len(flag.Args()) == 1 {
 		cli.PrintUsage()
 	}
 	_numTx := uint8(numTx)
@@ -123,9 +125,8 @@ func (cli *CommandLine) Run() {
 	} else {
 		go node.StartInteractive()
 		scanner := bufio.NewScanner(os.Stdin)
-		outerCommandLoop:
 		for {
-			fmt.Print("tierium: ")
+			fmt.Printf("\n%sterium>%s ", green, reset)
 			if !scanner.Scan() {
 				break
 			}
@@ -141,20 +142,18 @@ func (cli *CommandLine) Run() {
 				case "--createBlock", "-c" :
 					node.CreateBlock(make([]byte, 0))
 				case "--mineBlock", "-n" : 
-					if argN+1==len(args) {
-						cli.PrintUsage()
-						break outerCommandLoop
-					}
-					arg := args[argN+1]
-					if len(arg) == 64 {
-						node.Mine(cli.GetBlock(arg))
-					} else if arg == "node" {
+					if len(args) == 1 {
 						node.Mine(nil)
+					} else if len(args) == 2 && len(args[1]) == 64 {
+						node.Mine(cli.GetBlock(args[argN+1]))
+					} else {
+						cli.PrintUsage()
+						break
 					}
 				case "--validateBlock", "-v":
 					if argN+1==len(args) {
 						cli.PrintUsage()
-						break outerCommandLoop
+						break
 					}
 					arg := args[argN+1]
 					if len(arg) == 64 {
@@ -163,20 +162,18 @@ func (cli *CommandLine) Run() {
 						node.ValidateBlock(nil)
 					}
 				case "--addBlock", "-a":
-					if argN+1==len(args) {
-						cli.PrintUsage()
-						break outerCommandLoop
-					}
-					arg := args[argN+1]
-					if len(arg) == 64 {
-						node.AddBlock(cli.GetBlock(arg))
-					} else if arg == "node" {
+					if len(args) == 1 {
 						node.AddBlock(nil)
+					} else if len(args) == 2 && len(args[1]) == 64 {
+						node.AddBlock(cli.GetBlock(args[argN+1]))
+					} else {
+						cli.PrintUsage()
+						break
 					}
 				case "--broadcast", "-b":
 					if argN+1==len(args) {
 						cli.PrintUsage()
-						break outerCommandLoop
+						break
 					}
 					arg := args[argN+1]
 					if len(arg) == 64 {
@@ -187,7 +184,7 @@ func (cli *CommandLine) Run() {
 				case "--validateTx", "-e":
 					if argN+1==len(args) {
 						cli.PrintUsage()
-						break outerCommandLoop
+						break
 					}
 					arg := args[argN+1]
 					if len(arg) == 64 {
@@ -196,7 +193,7 @@ func (cli *CommandLine) Run() {
 				case "--addTxToMem", "-m":
 					if argN+1==len(args) {
 						cli.PrintUsage()
-						break outerCommandLoop
+						break
 					}
 					arg := args[argN+1]
 					if len(arg) == 64 {
@@ -205,12 +202,35 @@ func (cli *CommandLine) Run() {
 				case "--addTx", "-t": 
 					if argN+1==len(args) {
 						cli.PrintUsage()
-						break outerCommandLoop
+						break
 					}
 					arg := args[argN+1]
 					if len(arg) == 64 {
 						node.AddTxToBlock(cli.GetTx(arg))
 					}
+				case "--updateUtxoSet", "-u": 
+					if len(args) == 1 {
+						node.UpdateUtxoSet(nil)
+					} else if len(args) == 2 && len(args[1]) == 64 {
+						node.UpdateUtxoSet(cli.GetBlock(args[argN+1]))
+					} else {
+						cli.PrintUsage()
+						break
+					}
+				case "--getBlock", "-g": 
+				 	if len(args) == 2 && len(args[1]) == 64 {
+						node.GetBlock(args[1])
+					} else {
+						cli.PrintUsage()
+					}
+				case "--writeBlock", "-w": 
+				 	if len(args) == 2 && len(args[1]) == 64 {
+						node.WriteBlock()
+					} else {
+						cli.PrintUsage()
+					}
+				default:
+					fmt.Printf("Invalid command %s", args[argN])
 				}
 				argN++
 			}
@@ -218,11 +238,11 @@ func (cli *CommandLine) Run() {
 	}
 }
 func (cli *CommandLine) GetBlock(hexHash string) *block.Block {
-	p := path.Join(cli.ctx.TmpDir, "blocks", hexHash)
+	p := path.Join(cli.ctx.DataDir, hexHash)
 	b, err := os.ReadFile(p)
 	t_error.LogErr(err)
 	buffer := new(bytes.Buffer)
-	buffer.Write(b)
+	buffer.Write(b[:len(b) - 32])
 	dec := block.NewBlockDecoder(nil)
 	err = dec.Decode(buffer)
 	t_error.LogErr(err)
@@ -318,7 +338,14 @@ func (cli *CommandLine) ParseTx(tx string) ([]string, []int64) {
 }
 
 func (cli *CommandLine) Genesis() {
-	
+	var nodeAddr string
+	flag.StringVar(&nodeAddr, "nodeAddr", "", "")
+	flag.CommandLine.Parse(os.Args[2:])
+	if nodeAddr == "" {
+		cli.PrintUsage()
+		os.Exit(1)
+	}
+	cli.ctx.NodeConfig.ClientAddress = &nodeAddr
 	_blockStore := blockStore.NewBlockStore(cli.ctx)
 	_blockchain := blockchain.NewBlockchain(cli.ctx, _blockStore)
 	_mempool := mempool.NewMempoolIO(cli.ctx)

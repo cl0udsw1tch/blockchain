@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"math/big"
 
+	"github.com/terium-project/terium/internal/t_config"
 	"github.com/terium-project/terium/internal/transaction"
 )
 
@@ -44,7 +45,7 @@ func (d *HeaderDecoder) Clear() {
 
 func (d *HeaderDecoder) Decode(buffer *bytes.Buffer) error {
 
-	if buffer.Len() < 4 + 32 + 32 + 4 + 256 + 4 {
+	if buffer.Len() < 4 + 32 + 32 + 4 + 1 + 4 {
 		return BAD_HEADER_ERR{}
 	}
 
@@ -53,7 +54,8 @@ func (d *HeaderDecoder) Decode(buffer *bytes.Buffer) error {
 	d.header.MerkleRootHash = buffer.Next(32)
 	d.header.TimeStamp = binary.BigEndian.Uint32(buffer.Next(4))
 	d.header.Target = big.Int{}
-	d.header.Target.SetBytes(buffer.Next(256))
+	nbits := buffer.Next(1)[0]
+	d.header.Target = *new(big.Int).Lsh(big.NewInt(1), uint(255 - nbits + 1))
 	d.header.Nonce = binary.BigEndian.Uint32(buffer.Next(4))
 	
 	return nil
@@ -88,7 +90,7 @@ func (e *HeaderEncoder) Encode(header *Header) {
 	binary.Write(e.buffer, binary.BigEndian, header.PrevHash)
 	binary.Write(e.buffer, binary.BigEndian, header.MerkleRootHash)
 	binary.Write(e.buffer, binary.BigEndian, header.TimeStamp)
-	binary.Write(e.buffer, binary.BigEndian, header.Target.Bytes())
+	binary.Write(e.buffer, binary.BigEndian, t_config.NBits)
 	binary.Write(e.buffer, binary.BigEndian, header.Nonce)
 }
 
@@ -179,7 +181,6 @@ func (e *BlockEncoder) Encode(block *Block) {
 
 	txEnc := transaction.NewTxEncoder(e.buffer)
 	for _, tx := range block.Transactions {
-		txEnc.Clear()
 		txEnc.Encode(&tx)
 	}
 }

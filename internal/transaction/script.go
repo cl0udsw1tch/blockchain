@@ -27,8 +27,8 @@ type OpCtx struct {
 	TxIn   		*TxIn
 	InUtxo 		*Utxo
 	InIdx  		uint8
-	Script 		[][]byte
-	ScriptPtr	uint8
+	Script 		[]byte
+	ScriptPtr	uint64
 }
 
 type OpMap_T map[OpCode]OpFunc
@@ -76,12 +76,12 @@ var (
 	}
 
 	OpPushData OpFunc = func(ctx *OpCtx) {
-		nSz := OpPushMap[OpCode(ctx.Script[ctx.ScriptPtr][0])]
+		nSz := OpPushMap[OpCode(ctx.Script[ctx.ScriptPtr])]
 		ctx.ScriptPtr++
-		sz := binary.BigEndian.Uint32(ctx.Script[ctx.ScriptPtr][:nSz])
-		ctx.ScriptPtr++
-		ctx.Stack.Push(ctx.Script[ctx.ScriptPtr][:sz])
-		ctx.ScriptPtr++
+		sz := binary.BigEndian.Uint32(ctx.Script[ctx.ScriptPtr:nSz])
+		ctx.ScriptPtr+=uint64(nSz)
+		ctx.Stack.Push(ctx.Script[ctx.ScriptPtr:sz])
+		ctx.ScriptPtr+=uint64(sz)
 	}
 
 	OpDup OpFunc = func(ctx *OpCtx) {
@@ -159,18 +159,17 @@ func NewInterpreter(ctx *OpCtx) *Interpreter {
 }
 
 func (i *Interpreter) Execute() OpState {
-	for i.ctx.ScriptPtr	< uint8(len(i.ctx.Script)) {
-		OpMap[OpCode(i.ctx.Script[i.ctx.ScriptPtr][0])](i.ctx)
+	for i.ctx.ScriptPtr	< uint64(len(i.ctx.Script)) {
+		OpMap[OpCode(i.ctx.Script[i.ctx.ScriptPtr])](i.ctx)
 	}
 	return OpState(i.ctx.Stack.Peek()[0])
 }
 
 
-func GetAddrFromP2PKHLockScript(script [][]byte) string {
-	scriptStr := t_util.ConvertToHexString(script)
+func GetAddrFromP2PKHLockScript(script []byte) string {
+	scriptStr := hex.EncodeToString(script)
 
-
-	pattern := fmt.Sprintf(`^%x%x%x%x([0-9a-fA-F]{40})%x%x$`, 
+	pattern := fmt.Sprintf(`^%02x%02x%02x%02x([0-9a-fA-F]{40})%02x%02x$`, 
 		OP_DUP, 
 		OP_HASH160,
 		OP_PUSHDATA1,
@@ -183,21 +182,21 @@ func GetAddrFromP2PKHLockScript(script [][]byte) string {
 		t_error.LogErr(errors.New("bad scriptPubKey"))
 	}
 	matches := re.FindAllStringSubmatch(scriptStr, 1)
-	return matches[0][0]
+	return matches[0][1]
 
 
 }
 
-func P2PKH_LockScript(addrHex string) [][]byte {
+func P2PKH_LockScript(addrHex string) []byte {
 	addrBytes, err := hex.DecodeString(addrHex)
 	t_error.LogErr(err)
-	return [][]byte{
-		{byte(OP_DUP)}, // 1
-		{byte(OP_HASH160)}, // 1 
-		{byte(OP_PUSHDATA1)}, // 1 
-		{byte(0x14)}, // 1
-		addrBytes[1:21], // 20
-		{byte(OP_EQUALVERIFY)}, // 1
-		{byte(OP_CHECKSIG)}, // 1
+	r := []byte{
+		byte(OP_DUP), // 1
+		byte(OP_HASH160), // 1 
+		byte(OP_PUSHDATA1), // 1 
+		byte(0x14), // 1
 	}
+	r = append(r, addrBytes[1:21]...)
+	r = append(r, byte(OP_EQUALVERIFY), byte(OP_CHECKSIG))
+	return r
 }

@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
-	"encoding/hex"
-	"strings"
 )
 
 
@@ -42,16 +40,4 @@ func ByteLen(val int32) int {
 	buffer := bytes.Buffer{}
 	binary.Write(&buffer, binary.BigEndian, val)
 	return len(buffer.Bytes())
-}
-
-func ConvertToHexString(data [][]byte) string {
-	
-	var sb strings.Builder
-	
-	for _, byteSlice := range data {
-		hexStr := hex.EncodeToString(byteSlice)
-		sb.WriteString(hexStr)
-	}
-
-	return sb.String()
 }

@@ -78,7 +78,7 @@ func (w *WalletController) GenP2PKH(
 		inputs[i] = transaction.TxIn{
 			PrevOutpt:           outPoint,
 			UnlockingScriptSize: transaction.NewCompactSize(0),
-			UnlockingScript:     [][]byte{{0x00}},
+			UnlockingScript:     []byte{0x00},
 		}
 	}
 	wg := sync.WaitGroup{}
@@ -87,19 +87,22 @@ func (w *WalletController) GenP2PKH(
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
+			lockingScript := []byte{
+				byte(transaction.OP_DUP),         // 1
+				byte(transaction.OP_HASH160),     // 1
+				byte(transaction.OP_PUSHDATA1),   // 1
+				byte(0x14),
+			}
+			lockingScript = append(lockingScript, []byte(recipientAddrs[i])[1:21]...)
+			lockingScript = append(lockingScript, byte(transaction.OP_EQUALVERIFY),
+			byte(transaction.OP_CHECKSIG),)
+					
 			outputs[i] = transaction.TxOut{
 				Value:             recipientVal[i],
 				LockingScriptSize: transaction.NewCompactSize(transaction.P2PKH_LOCK_SCRIPT_SZ),
-				LockingScript: [][]byte{
-					{byte(transaction.OP_DUP)},         // 1
-					{byte(transaction.OP_HASH160)},     // 1
-					{byte(transaction.OP_PUSHDATA1)},   // 1
-					{byte(0x14)},                       // 1
-					[]byte(recipientAddrs[i])[1:21],    // 20
-					{byte(transaction.OP_EQUALVERIFY)}, // 1
-					{byte(transaction.OP_CHECKSIG)},    // 1
-				},
+				LockingScript: lockingScript,
 			}
+			
 		}(i)
 	}
 	wg.Wait()
@@ -123,17 +126,19 @@ func (w *WalletController) SignTxIn(
 	inIdx uint8,
 	inUTXO *transaction.Utxo,
 	sigHashFlag byte) {
+
 	sig := w.wallet.ClientId.Sign(tx.Preimage(inIdx, inUTXO, sigHashFlag))
 	pk := client.MarshalPubKey(w.wallet.ClientId.PublicKey)
 	nPk := len(pk)
-	tx.Inputs[inIdx].UnlockingScript = [][]byte{
-		{byte(transaction.OP_PUSHDATA1)},
-		{byte(0x20)},
-		sig,
-		{byte(transaction.OP_PUSHDATA1)},
-		{byte(nPk)},
-		pk,
+	tx.Inputs[inIdx].UnlockingScript = []byte{
+		byte(transaction.OP_PUSHDATA1),
+		byte(0x20),
 	}
+	tx.Inputs[inIdx].UnlockingScript = append(tx.Inputs[inIdx].UnlockingScript, sig...)
+	tx.Inputs[inIdx].UnlockingScript = append(tx.Inputs[inIdx].UnlockingScript, byte(transaction.OP_PUSHDATA1),
+	byte(nPk))
+	tx.Inputs[inIdx].UnlockingScript = append(tx.Inputs[inIdx].UnlockingScript, pk...)
+	tx.Inputs[inIdx].UnlockingScriptSize = transaction.NewCompactSize(int64(len(tx.Inputs[inIdx].UnlockingScript)))
 }
 
 func (w *WalletController) SignTx(
@@ -155,7 +160,7 @@ func (w *WalletController) Balance() int64 {
 	var sum int64 = 0
 	store := utxoSet.NewUtxoStore(w.ctx)
 	defer store.Close()
-	utxos := store.FindUTXOsByAddr(w.wallet.ClientId.Address)
+	utxos := store.FindUTXOsByAddr(hex.EncodeToString(w.wallet.ClientId.PubKeyHash))
 	for _, utxo := range utxos {
 		sum += utxo.Value
 	}

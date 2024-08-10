@@ -33,24 +33,24 @@ func (store *UtxoStore) Close() {
 }
 
 func (store *UtxoStore) Read(pt *transaction.OutPoint) (*transaction.Utxo, bool) {
-	var utxo transaction.Utxo
-	buffer := bytes.Buffer{}
-	enc := transaction.NewOutPointEncoder(&buffer)
+	var utxo *transaction.Utxo
+	enc := transaction.NewOutPointEncoder(nil)
 	enc.Encode(pt)
 
 	err := store.db.View(func(txn *badger.Txn) error {
 
-		item, err := txn.Get(buffer.Bytes())
+		item, err := txn.Get(enc.Bytes())
 
 		if err != nil {
 			return err
 		}
 
 		err = item.Value(func(val []byte) error {
-			utxobytes := bytes.Buffer{}
+			utxobytes := new(bytes.Buffer)
 			utxobytes.Write(val)
-			utxoDec := transaction.NewUtxoDecoder(&utxo)
-			utxoDec.Decode(&buffer)
+			utxoDec := transaction.NewUtxoDecoder(nil)
+			utxoDec.Decode(utxobytes)
+			utxo = utxoDec.Out()
 			return nil
 		})
 
@@ -60,16 +60,19 @@ func (store *UtxoStore) Read(pt *transaction.OutPoint) (*transaction.Utxo, bool)
 		return nil, false
 	}
 	t_error.LogErr(err)
-	return &utxo, true
+	return utxo, true
 }
 
 func (store *UtxoStore) Write(utxo *transaction.Utxo) {
-	buffer := bytes.Buffer{}
-	utxoEnc := transaction.NewUtxoEncoder(&buffer)
+
+	utxoEnc := transaction.NewUtxoEncoder(nil)
 	utxoEnc.Encode(utxo)
 
+	outptEnc := transaction.NewOutPointEncoder(nil)
+	outptEnc.Encode(&utxo.OutPoint)
+
 	err := store.db.Update(func(txn *badger.Txn) error {
-		err := txn.Set(utxoEnc.Bytes()[:36], utxoEnc.Bytes()[36:])
+		err := txn.Set(outptEnc.Bytes(), utxoEnc.Bytes())
 		return err
 	})
 
@@ -95,13 +98,14 @@ func (store *UtxoStore) FindUTXOsByAddr(addrHex string) []transaction.Utxo {
 		iter := txn.NewIterator(badger.DefaultIteratorOptions)
 		defer iter.Close()
 		utxoDec := transaction.NewUtxoDecoder(nil)
-		buffer := bytes.Buffer{}
+		buffer := new(bytes.Buffer)
 		for iter.Rewind(); iter.Valid(); iter.Next() {
 			item := iter.Item()
 			err := item.Value(func(val []byte) error {
 
 				buffer.Write(val)
-				utxoDec.Decode(&buffer)
+				err := utxoDec.Decode(buffer)
+				t_error.LogErr(err)
 				lockaddr := transaction.GetAddrFromP2PKHLockScript(utxoDec.Out().LockingScript)
 				if lockaddr == addrHex {
 					utxos.PushBack(utxoDec.Out())

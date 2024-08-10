@@ -1,12 +1,14 @@
 package node
 
 import (
+	"bytes"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"path"
 	"sync"
+
 	"github.com/terium-project/terium/internal/block"
 	"github.com/terium-project/terium/internal/blockStore"
 	"github.com/terium-project/terium/internal/blockchain"
@@ -14,6 +16,7 @@ import (
 	"github.com/terium-project/terium/internal/miner"
 	"github.com/terium-project/terium/internal/server"
 	"github.com/terium-project/terium/internal/t_config"
+	"github.com/terium-project/terium/internal/t_error"
 	"github.com/terium-project/terium/internal/transaction"
 	"github.com/terium-project/terium/internal/utxoSet"
 	"github.com/terium-project/terium/internal/validator"
@@ -31,6 +34,7 @@ type Node struct {
 	txIndex *transaction.TxIndexIO
 	mempool *mempool.MempoolIO
 	utxoStore *utxoSet.UtxoStore
+	block *block.Block
 }
 
 func NewNode(ctx *t_config.Context, newConf *t_config.Config) *Node {
@@ -149,7 +153,8 @@ func (node *Node) StartInteractive() {
 
 
 func (node *Node) CreateBlock(coinbaseScript []byte) {
-	node.miner.CreateBlock([][]byte{coinbaseScript})
+	node.miner.CreateBlock(coinbaseScript)
+	node.block = node.miner.Block()
 }
 
 // Adds block to blockchain, updates UTXO set
@@ -191,12 +196,17 @@ func (node *Node) TxListen() <-chan *transaction.Tx {
 	return ch
 }
 
-func (node *Node) UpdateUtxoSet(block *block.Block) {
+func (node *Node) UpdateUtxoSet(_block *block.Block) {
+	var block *block.Block
+	if _block == nil {
+		block = node.miner.Block() 
+	} else {
+		block = _block
+	}
 	if block.Transactions == nil {
 		return
 	}
 	wg := sync.WaitGroup{}
-	defer node.utxoStore.Close()
 	for _, tx := range block.Transactions {
 		wg.Add(1)
 		go func(tx *transaction.Tx) {
@@ -250,4 +260,22 @@ func (node *Node) Mine(block *block.Block) {
 	} 
 	node.miner.Mine(nil)
 	
+}
+
+func (node *Node) GetBlock(hash string) {
+	p := path.Join(node.ctx.DataDir, hash)
+	b, err := os.ReadFile(p)
+	t_error.LogErr(err)
+	buffer := new(bytes.Buffer)
+	buffer.Write(b[:len(b) - 32])
+	dec := block.NewBlockDecoder(nil)
+	err = dec.Decode(buffer)
+	t_error.LogErr(err)
+	node.block = dec.Out()
+}
+
+func (node *Node) WriteBlock() {
+	p := path.Join(node.ctx.DataDir, hex.EncodeToString(node.block.Hash()))
+	b := node.block.Serialize()
+	os.WriteFile(p, b, 0600)
 }

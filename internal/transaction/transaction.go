@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 
 	"github.com/terium-project/terium/internal/t_util"
+
 )
 
 type OutPoint struct {
@@ -38,12 +39,12 @@ func NewCompactSize(val int64) CompactSize {
 	binary.Write(&buffer, binary.BigEndian, val)
 	sz := 0
 	bts := buffer.Bytes()
-	for sz < len(bts) && bts[sz] == 0 {
+	for sz < len(bts) && bts[len(buffer.Bytes()) - 1 - sz] != 0x00 {
 		sz++
 	}
 	if sz == 0 {
 		return CompactSize{
-			Type: byte(0),
+			Type: byte(1),
 			Size: []byte{0},
 		}
 	}
@@ -56,11 +57,11 @@ func NewCompactSize(val int64) CompactSize {
 type TxOut struct {
 	Value             int64
 	LockingScriptSize CompactSize
-	LockingScript     [][]byte
+	LockingScript     []byte
 }
 
 func (s TxOut) Copy() TxOut {
-	lockscript := t_util.CopySlice2D(s.LockingScript)
+	lockscript := bytes.Clone(s.LockingScript)
 	o := TxOut{
 		Value:             s.Value,
 		LockingScriptSize: s.LockingScriptSize,
@@ -82,13 +83,13 @@ func (s TxOuts) Copy() TxOuts {
 type TxIn struct {
 	PrevOutpt           OutPoint
 	UnlockingScriptSize CompactSize
-	UnlockingScript     [][]byte
+	UnlockingScript     []byte
 }
 
 type TxIns []TxIn
 
 func (s TxIn) Copy() TxIn {
-	unlockscript := t_util.CopySlice2D(s.UnlockingScript)
+	unlockscript := bytes.Clone(s.UnlockingScript)
 	o := TxIn{
 		PrevOutpt:           s.PrevOutpt.Copy(),
 		UnlockingScriptSize: s.UnlockingScriptSize,
@@ -117,7 +118,7 @@ type Utxo struct {
 	OutPoint          OutPoint
 	Value             int64
 	LockingScriptSize CompactSize
-	LockingScript     [][]byte
+	LockingScript     []byte
 }
 
 func (s *Tx) Copy() Tx {
@@ -134,7 +135,7 @@ func (s *Tx) Copy() Tx {
 }
 
 func (tx *Tx) Serialize() []byte {
-	e := TxEncoder{}
+	e := NewTxEncoder(nil)
 	e.Encode(tx)
 	return e.Bytes()
 }
@@ -143,7 +144,7 @@ func (tx *Tx) Hash() []byte {
 	return t_util.Hash256(tx.Serialize())
 }
 
-func Coinbase(scriptSz CompactSize, script [][]byte) TxIn {
+func Coinbase(scriptSz CompactSize, script []byte) TxIn {
 	return TxIn{
 		PrevOutpt:           OutPoint{TxId: make([]byte, 32), Idx: -1},
 		UnlockingScriptSize: scriptSz,
@@ -172,8 +173,8 @@ func (tx *Tx) Preimage(inIdx uint8, inUTXO *Utxo, sigHashFlag byte) []byte {
 	txCopy := tx.Copy()
 
 	for _, tx_in := range txCopy.Inputs {
-		tx_in.UnlockingScript = [][]byte{{0x00}}
-		tx_in.UnlockingScriptSize = CompactSize{Type: COMPACT_SZ1, Size: []byte{0x00}}
+		tx_in.UnlockingScript = []byte{0x00}
+		tx_in.UnlockingScriptSize = NewCompactSize(1)
 	}
 	txCopy.Inputs[inIdx].UnlockingScriptSize = inUTXO.LockingScriptSize
 	txCopy.Inputs[inIdx].UnlockingScript = inUTXO.LockingScript
@@ -187,8 +188,8 @@ func (tx *Tx) Preimage(inIdx uint8, inUTXO *Utxo, sigHashFlag byte) []byte {
 		txCopy.Outputs = txCopy.Outputs[:inIdx+1]
 		for _, tx_out := range txCopy.Outputs[:inIdx] {
 			tx_out.Value = -1
-			tx_out.LockingScriptSize = CompactSize{Type: COMPACT_SZ1, Size: []byte{0x00}}
-			tx_out.LockingScript = [][]byte{}
+			tx_out.LockingScriptSize = NewCompactSize(1)
+			tx_out.LockingScript = []byte{0x00}
 		}
 	}
 

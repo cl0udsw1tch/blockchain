@@ -50,28 +50,26 @@ func (miner *Miner) Genesis() {
 		t_error.LogWarn(errors.New("blockchain already exists, wont create genesis block"))
 		os.Exit(1)
 	}
+
 	genesis := block.Block{
 		Header: block.Header{
 			Version:   t_config.Version,
-			PrevHash:  []byte{},
+			PrevHash:  make([]byte, 32),
 			TimeStamp: uint32(time.Now().Unix()),
 			Target:    *t_config.Target,
 		},
-		TXCount:      0,
-		Transactions: nil,
+		TXCount:      1,
+		Transactions: []transaction.Tx{miner.CoinbaseTx(uint32(t_config.Version), transaction.NewCompactSize(0), make([]byte, 0))},
 	}
 	miner.block = &genesis
 	miner.Mine(nil)
 	miner.blockchain.AddGenesis(miner.block)
 }
 
-func (miner *Miner) CreateBlock(coinbaseSript [][]byte) {
+func (miner *Miner) CreateBlock(coinbaseSript []byte) {
 
-	var n int64 = 0
-	for _, s := range coinbaseSript {
-		n += int64(len(s))
-	}
-	coinbaseScriptSz := transaction.NewCompactSize(n)
+
+	coinbaseScriptSz := transaction.NewCompactSize(int64(len(coinbaseSript)))
 	coinbaseTx := miner.CoinbaseTx(uint32(t_config.Version), coinbaseScriptSz, coinbaseSript)
 
 	header := block.Header{
@@ -188,7 +186,7 @@ func (miner *Miner) Mine(quit chan byte) bool {
 				for _, n := range(state.Hash) {
 					s += fmt.Sprintf("%08b", n)
 				}
-				fmt.Printf("\n\nBinary:\n%0*s", 256, s)
+				fmt.Printf("\n\nBinary:\n%0*s\n", 256, s)
 			}
 		}
 	}()
@@ -199,7 +197,7 @@ func (miner *Miner) Mine(quit chan byte) bool {
 func (miner *Miner) CoinbaseTx(
 	version uint32,
 	inScriptSz transaction.CompactSize,
-	inSript [][]byte) transaction.Tx {
+	inSript []byte) transaction.Tx {
 
 	output := transaction.TxOut{
 		Value:             t_config.BLOCK_REWARD,
