@@ -18,7 +18,6 @@ import (
 
 type Miner struct {
 	mempool     *mempool.MempoolIO
-	block       *block.Block
 	ctx         *t_config.Context
 	blockchain  *blockchain.Blockchain
 	pow         *proof.PoW
@@ -36,15 +35,7 @@ func NewMiner(ctx *t_config.Context, blockchain *blockchain.Blockchain, mempool 
 	return miner
 }
 
-func (miner *Miner) SetBlock(block *block.Block) {
-	miner.block = block
-}
-
-func (miner *Miner) Block() *block.Block {
-	return miner.block
-}
-
-func (miner *Miner) Genesis() {
+func (miner *Miner) Genesis() *block.Block {
 
 	if miner.blockchain.LastMeta() != nil {
 		t_error.LogWarn(errors.New("blockchain already exists, wont create genesis block"))
@@ -61,12 +52,13 @@ func (miner *Miner) Genesis() {
 		TXCount:      1,
 		Transactions: []transaction.Tx{miner.CoinbaseTx(uint32(t_config.Version), transaction.NewCompactSize(0), make([]byte, 0))},
 	}
-	miner.block = &genesis
-	miner.Mine(nil)
-	miner.blockchain.AddGenesis(miner.block)
+
+	miner.Mine(nil, &genesis)
+	miner.blockchain.AddGenesis(&genesis)
+	return &genesis
 }
 
-func (miner *Miner) CreateBlock(coinbaseSript []byte) {
+func (miner *Miner) CreateBlock(coinbaseSript []byte) *block.Block {
 
 
 	coinbaseScriptSz := transaction.NewCompactSize(int64(len(coinbaseSript)))
@@ -79,7 +71,7 @@ func (miner *Miner) CreateBlock(coinbaseSript []byte) {
 		TimeStamp: uint32(time.Now().Unix()),
 	}
 
-	miner.block = &block.Block{
+	return &block.Block{
 		Header:       header,
 		TXCount:      1,
 		Transactions: []transaction.Tx{coinbaseTx},
@@ -138,7 +130,7 @@ func (s *MinerSignal) Resume() {
 	s.MineSignal.SignalResume()
 }
 
-func (miner *Miner) MineFromMempool() {
+func (miner *Miner) MineFromMempool(block *block.Block) {
 
 	for {
 		select {
@@ -149,35 +141,34 @@ func (miner *Miner) MineFromMempool() {
 			txs := miner.mempool.GetTxByPriority(int64(*miner.ctx.NodeConfig.NumTxInBlock))
 			if len(txs) == int(*miner.ctx.NodeConfig.NumTxInBlock) {
 				for _, tx := range txs {
-					miner.AddTxToBlock(&tx)
+					miner.AddTxToBlock(&tx, block)
 				}
 
 				// where this node attempts to mine the block
-				if miner.Mine(miner.Signal.SolveSignal.Reset) {
+				if miner.Mine(miner.Signal.SolveSignal.Reset, block) {
 					miner.Signal.SolveSignal.SignalReady()
-					miner.AddBlock(miner.block)
+					miner.AddBlock(block)
 				}
 			}
 		}
 	}
 }
 
-func (miner *Miner) AddTxToBlock(tx *transaction.Tx) {
-	miner.block.Transactions = append(miner.block.Transactions, *tx)
-	miner.block.TXCount++
+func (miner *Miner) AddTxToBlock(tx *transaction.Tx, block *block.Block) {
+	block.Transactions = append(block.Transactions, *tx)
+	block.TXCount++
 }
 
 // adds block to blockchain, updates UTXO set
 func (miner *Miner) AddBlock(block *block.Block) {
 	miner.blockchain.AddBlock(block)
-
 }
 
-func (miner *Miner) Mine(quit chan byte) bool {
+func (miner *Miner) Mine(quit chan byte, block *block.Block) bool {
 	miner.pow = proof.NewPoW()
 	defer miner.pow.Close()
-	miner.block.Header.TimeStamp = uint32(time.Now().Unix())
-	miner.block.Header.MerkleRootHash = miner.block.MerkelRoot()
+	block.Header.TimeStamp = uint32(time.Now().Unix())
+	block.Header.MerkleRootHash = block.MerkelRoot()
 	go func(){
 		for state := range miner.pow.Notifier {
 			fmt.Printf("\rNonce: %X\tHash: %s\t Solved: %t", state.Nonce, hex.EncodeToString(state.Hash), state.Solved)
@@ -190,7 +181,7 @@ func (miner *Miner) Mine(quit chan byte) bool {
 			}
 		}
 	}()
-	return miner.pow.Solve(miner.block, quit)
+	return miner.pow.Solve(block, quit)
 }
 
 

@@ -35,6 +35,7 @@ type Node struct {
 	mempool *mempool.MempoolIO
 	utxoStore *utxoSet.UtxoStore
 	block *block.Block
+	tx *transaction.Tx
 }
 
 func NewNode(ctx *t_config.Context, newConf *t_config.Config) *Node {
@@ -87,6 +88,91 @@ func NewNode(ctx *t_config.Context, newConf *t_config.Config) *Node {
 	return node
 }
 
+func (node *Node) GetBlock() *block.Block {
+	return node.block
+}
+
+func (node *Node) SetBlock(block *block.Block) {
+	node.block = block
+}
+
+func (node *Node) GetTx() *transaction.Tx {
+	return node.tx
+}
+
+func (node *Node) SetTx(tx *transaction.Tx) {
+	node.tx = tx
+}
+
+func (node *Node) ReadTmpBlock(hash string) *block.Block {
+	p := path.Join(node.ctx.TmpDir, "blocks", hash)
+	return node.readBlock(p)
+}
+
+func (node *Node) ReadBlock(hash string) *block.Block {
+	p := path.Join(node.ctx.DataDir, hash)
+	return node.readBlock(p)
+}
+
+func (node *Node) readBlock(path string) *block.Block {
+	b, err := os.ReadFile(path)
+	t_error.LogErr(err)
+	buffer := new(bytes.Buffer)
+	buffer.Write(b[:len(b) - 32])
+	dec := block.NewBlockDecoder(nil)
+	err = dec.Decode(buffer)
+	t_error.LogErr(err)
+	return dec.Out()
+}
+
+func (node *Node) WriteTmpBlock() {
+	p := path.Join(node.ctx.TmpDir, "blocks", hex.EncodeToString(node.block.Hash()))
+	node.writeBlock(p)
+}
+
+func (node *Node) WriteBlock() {
+	p := path.Join(node.ctx.DataDir, hex.EncodeToString(node.block.Hash()))
+	node.writeBlock(p)
+}
+
+func (node *Node) writeBlock(path string) {
+	b := node.block.Serialize()
+	os.WriteFile(path, b, 0600)
+}
+
+func (node *Node) DeleteTmpBlock(hash string) {
+	p := path.Join(node.ctx.TmpDir, "blocks", hex.EncodeToString(node.block.Hash()))
+	os.Remove(p)
+}
+
+func (node *Node) DeleteBlock(hash string) {
+	p := path.Join(node.ctx.DataDir, hex.EncodeToString(node.block.Hash()))
+	os.Remove(p)
+}
+
+func (node *Node) ReadTmpTx(hash string) *transaction.Tx {
+	path := path.Join(node.ctx.TmpDir, "txs", hash)
+	b, err := os.ReadFile(path)
+	t_error.LogErr(err)
+	buffer := new(bytes.Buffer)
+	buffer.Write(b[:len(b) - 32])
+	dec := transaction.NewTxDecoder(nil)
+	err = dec.Decode(buffer)
+	t_error.LogErr(err)
+	return dec.Out()
+}
+
+func (node *Node) WriteTmpTx() {
+	path := path.Join(node.ctx.TmpDir, "txs", hex.EncodeToString(node.tx.Hash()))
+	b := node.tx.Serialize()
+	os.WriteFile(path, b, 0600)
+}
+
+func (node *Node) DeleteTmpTx(hash string) {
+	p := path.Join(node.ctx.TmpDir, "txs", hex.EncodeToString(node.tx.Hash()))
+	os.Remove(p)
+}
+
 func (node *Node) Run() {
 
 	node.CreateBlock(make([]byte, 0))
@@ -97,25 +183,26 @@ func (node *Node) Run() {
 
 		case <-node.miner.Signal.SolveSignal.Ready :
 			// node has mined a block and added it to the blockchain
-			block := node.miner.Block()
-			node.server.Block().InStream<- block
-			node.UpdateUtxoSet(block)
-			node.UpdateTxIndex(block)
+			node.server.Block().InStream<- node.block
+			node.UpdateUtxoSet()
+			node.UpdateTxIndex()
 			node.CreateBlock(make([]byte, 0))
 
 		case tx := <-node.server.Tx().OutStream :
 			// incoming tx from network
-			if !node.ValidateTx(tx) {
+			node.tx = tx
+			if !node.ValidateTx() {
 				fmt.Println("Invalid tx")
 			} else {
-				node.UpdateMempool(tx)
+				node.AddTxToPool()
 			}
 
 		case block := <-node.server.Block().OutStream : 
 			// incoming block from network
-			if node.ValidateBlock(block) {
+			if node.ValidateBlock() {
+				node.block = block
 				node.PauseMiner()
-				node.AddBlock(block)
+				node.AddBlock()
 				node.CreateBlock(make([]byte, 0))
 				node.ResumeMiner()
 			}
@@ -124,7 +211,7 @@ func (node *Node) Run() {
 }
 
 func (node *Node) StartMiner() {
-	go node.miner.MineFromMempool()
+	go node.miner.MineFromMempool(node.block)
 }
 
 func (node *Node) PauseMiner() {
@@ -140,7 +227,7 @@ func (node *Node) StartInteractive() {
 	for {
 		select {
 		case <-node.miner.Signal.SolveSignal.Ready :
-			os.WriteFile(path.Join(node.ctx.TmpDir, "blocks", hex.EncodeToString(node.miner.Block().Hash())), node.miner.Block().Serialize(), 0666)
+			os.WriteFile(path.Join(node.ctx.TmpDir, "blocks", hex.EncodeToString(node.block.Hash())), node.block.Serialize(), 0666)
 
 		case tx := <-node.server.Tx().OutStream :
 			os.WriteFile(path.Join(node.ctx.TmpDir, "txs", hex.EncodeToString(tx.Hash())), tx.Serialize(), 0666)
@@ -151,43 +238,40 @@ func (node *Node) StartInteractive() {
 	}
 }
 
-
 func (node *Node) CreateBlock(coinbaseScript []byte) {
-	node.miner.CreateBlock(coinbaseScript)
-	node.block = node.miner.Block()
+	node.block = node.miner.CreateBlock(coinbaseScript)
+}
+
+func (node *Node) Mine() {
+	node.miner.Mine(nil, node.block)
 }
 
 // Adds block to blockchain, updates UTXO set
-func (node *Node) AddBlock(block *block.Block) {
-	if block != nil {
-		node.miner.AddBlock(block)
-		return
+func (node *Node) AddBlock() {
+	node.miner.AddBlock(node.block)
+}
+
+func (node *Node) ValidateBlock() bool {
+	if node.block != nil {
+		return node.blockValidator.Validate(node.block)
 	}
-	node.miner.AddBlock(node.miner.Block())
+	return node.blockValidator.Validate(node.block)
 }
 
-
-func (node *Node) ValidateBlock(block *block.Block) bool {
-	if block != nil {
-		return node.blockValidator.Validate(block)
-	}
-	return node.blockValidator.Validate(node.miner.Block())
+func (node *Node) AddTxToBlock() {
+	node.miner.AddTxToBlock(node.tx, node.block)
 }
 
-func (node *Node) AddTxToBlock(tx *transaction.Tx) {
-	node.miner.AddTxToBlock(tx)
-}
-
-func (node *Node) AddTxToPool(tx *transaction.Tx) error {
-	if !node.txValidator.ValidateTx(tx) {
+func (node *Node) AddTxToPool() error {
+	if !node.txValidator.ValidateTx(node.tx) {
 		return errors.New("invalid tx")
 	}
-	node.mempool.Write(tx.Hash(), tx, node.blockchain.GetFee(tx))
+	node.mempool.Write(node.tx.Hash(), node.tx, node.blockchain.GetFee(node.tx))
 	return nil
 }
 
-func (node *Node) ValidateTx(tx *transaction.Tx) bool {
-	return node.txValidator.ValidateTx(tx)
+func (node *Node) ValidateTx() bool {
+	return node.txValidator.ValidateTx(node.tx)
 }
 // goroutines
 
@@ -196,18 +280,13 @@ func (node *Node) TxListen() <-chan *transaction.Tx {
 	return ch
 }
 
-func (node *Node) UpdateUtxoSet(_block *block.Block) {
-	var block *block.Block
-	if _block == nil {
-		block = node.miner.Block() 
-	} else {
-		block = _block
-	}
-	if block.Transactions == nil {
+func (node *Node) UpdateUtxoSet() {
+
+	if node.block.Transactions == nil {
 		return
 	}
 	wg := sync.WaitGroup{}
-	for _, tx := range block.Transactions {
+	for _, tx := range node.block.Transactions {
 		wg.Add(1)
 		go func(tx *transaction.Tx) {
 			defer wg.Done()
@@ -232,50 +311,21 @@ func (node *Node) UpdateUtxoSet(_block *block.Block) {
 	wg.Wait()
 }
 
-func (node *Node) UpdateTxIndex(block *block.Block) {
-	for i, tx := range block.Transactions {
+func (node *Node) UpdateTxIndex() {
+	for i, tx := range node.block.Transactions {
 		node.txIndex.Create(tx.Hash(), &transaction.TxMetadata{
-			BlockHash:   block.Hash(),
+			BlockHash:   node.block.Hash(),
 			BlockHeight: node.blockchain.Height(),
 			Index:       uint8(i),
 		})
 	}
 }
 
-func (node *Node) UpdateMempool(tx *transaction.Tx) {
-	node.mempool.Write(tx.Hash(), tx, node.blockchain.GetFee(tx))
+
+func (node *Node) Broadcast() {
+	node.server.Block().InStream<- node.block
 }
 
-func (node *Node) Broadcast(block *block.Block) {
-	if block != nil {
-		node.server.Block().InStream<- block
-		return
-	}
-	node.server.Block().InStream<- node.miner.Block()
-}
-
-func (node *Node) Mine(block *block.Block) {
-	if block != nil {
-		node.miner.SetBlock(block)
-	} 
-	node.miner.Mine(nil)
-	
-}
-
-func (node *Node) GetBlock(hash string) {
-	p := path.Join(node.ctx.DataDir, hash)
-	b, err := os.ReadFile(p)
-	t_error.LogErr(err)
-	buffer := new(bytes.Buffer)
-	buffer.Write(b[:len(b) - 32])
-	dec := block.NewBlockDecoder(nil)
-	err = dec.Decode(buffer)
-	t_error.LogErr(err)
-	node.block = dec.Out()
-}
-
-func (node *Node) WriteBlock() {
-	p := path.Join(node.ctx.DataDir, hex.EncodeToString(node.block.Hash()))
-	b := node.block.Serialize()
-	os.WriteFile(p, b, 0600)
+func (node *Node) Genesis() {
+	node.block = node.miner.Genesis()
 }

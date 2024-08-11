@@ -11,7 +11,7 @@ import (
 
 const (
 	Version           int32 = 0x01
-	NBits             uint8 = 2
+	NBits             uint8 = 20
 	COINBASE_MATURITY uint8 = 100
 	BLOCK_REWARD      int64 = 100_000
 )
