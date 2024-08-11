@@ -33,45 +33,45 @@ func (cli *CommandLine) PrintUsage() {
 	fmt.Println("Usage:")
 	fmt.Println("command [--arg_name [arg_value]] ...")
 
-	fmt.Println("run | node")
-	fmt.Printf("%-40s%s", "--numTx", "Number of txs to include before mining current block. Default 10\n")
-	fmt.Printf("%-40s%s", "--port", "Port to listen and send on. Default "+fmt.Sprint(t_config.RpcEndpointPort)+"\n")
-	fmt.Printf("%-40s%s", "--nodeAddr", "Address for block rewards\n")
+	fmt.Println("\nrun | node")
+	fmt.Printf("%-20s%-30s%s", "--numTx", "[num]", "Number of txs to include before mining current block. Default 10\n")
+	fmt.Printf("%-20s%-30s%s", "--port", "[port]", "Port to listen and send on. Default "+fmt.Sprint(t_config.RpcEndpointPort)+"\n")
+	fmt.Printf("%-20s%-30s%s", "--nodeAddr", "[address]", "Address for block rewards\n")
 
-	fmt.Println("node")
-	fmt.Printf("%-40s%s", "--readBlk <string>", "Reads block from .tmp into node\n")
-	fmt.Printf("%-40s%s", "--writeBlk", "Writes block from node into .tmp\n")
-	fmt.Printf("%-40s%s", "--createBlk", "Creates block\n")
-	fmt.Printf("%-40s%s", "--mineBlk [block_hash]", "Mines block\n")
-	fmt.Printf("%-40s%s", "--validateBlk [block_hash]", "Validates block\n")
-	fmt.Printf("%-40s%s", "--addBlk [block_hash]", "Adds a mined and validated block to the local blockchain\n")
-	fmt.Printf("%-40s%s", "--broadcastBlk [block_hash]", "Broadcasts a mined and validated block to the local blockchain\n")
-	fmt.Printf("%-40s%s", "--validateTx [tx_hash]", "Validates a transaction\n")
-	fmt.Printf("%-40s%s", "--addTxToMem [tx_hash]", "Adds tx to mempool. Validate first\n")
-	fmt.Printf("%-40s%s", "--addTxToBlk [tx_hash]", "Adds a validated transaction to block\n")
-	fmt.Printf("%-40s%s", "--addTxsToUtxos [tx_hash]", "Updates utxoset with txs from node's current block\n")
+	fmt.Println("\nnode")
+	fmt.Printf("%-20s%-30s%s", "--readBlk", "[block_hash]", "Reads block from .tmp into node\n")
+	fmt.Printf("%-50s%s", "--writeBlk", "Writes block from node into .tmp\n")
+	fmt.Printf("%-50s%s", "--createBlk", "Creates block\n")
+	fmt.Printf("%-20s%-30s%s", "--mineBlk", "[block_hash]", "Mines block\n")
+	fmt.Printf("%-20s%-30s%s", "--validateBlk", "[block_hash]", "Validates block\n")
+	fmt.Printf("%-20s%-30s%s", "--addBlk", "[block_hash]", "Adds a mined and validated block to the local blockchain\n")
+	fmt.Printf("%-20s%-30s%s", "--broadcastBlk", "[block_hash]", "Broadcasts a mined and validated block to the local blockchain\n")
+	fmt.Printf("%-20s%-30s%s", "--validateTx", "[tx_hash]", "Validates a transaction\n")
+	fmt.Printf("%-20s%-30s%s", "--addTxToMem", "[tx_hash]", "Adds tx to mempool. Validate first\n")
+	fmt.Printf("%-20s%-30s%s", "--addTxToBlk", "[tx_hash]", "Adds a validated transaction to block\n")
+	fmt.Printf("%-20s%-30s%s", "--addTxsToUtxos", "[tx_hash]", "Updates utxoset with txs from node's current block\n")
 
-	fmt.Println("wallet")
-	fmt.Printf("%-40s%s", "--name <string>", "name of wallet to use, creates one if it doesnt exist\n")
-	fmt.Printf("%-40s%s", "--balance", "print balance\n")
-	fmt.Printf("%-40s%s", "--tx <address:value,...>", "create a transaction. arg is hex encoded address:value,...\n")
-	fmt.Printf("%-40s%s", "--sendTx <tx_hash>", "broadcast transaction. Arg is the txid.\n")
+	fmt.Println("\nwallet")
+	fmt.Printf("%-20s%-30s%s", "--name", "<name>", "Name of wallet to use, creates one if it doesnt exist\n")
+	fmt.Printf("%-50s%s", "--balance", "Print balance\n")
+	fmt.Printf("%-20s%-30s%s", "--tx", "<address:value,...>", "Create a transaction. arg is hex encoded address:value,...\n")
+	fmt.Printf("%-20s%-30s%s", "--sendTx", "[tx_hash]", "Broadcast transaction. Arg is the txid.\n")
 
-	fmt.Println("blockchain")
-	fmt.Printf("%-40s%s", "--print", "Print the block header hashes of the main branch\n")
-	fmt.Printf("%-40s%s", "--utxo", "Print the utxo outpoints in the utxo set\n")
-	fmt.Printf("%-40s%s", "--mempool", "Print the tx hashes in the mempool\n")
-
-
+	fmt.Println("\nblockchain")
+	fmt.Printf("%-50s%s", "--print", "Print the block header hashes of the main branch\n")
+	fmt.Printf("%-50s%s", "--utxo", "Print the utxo outpoints in the utxo set\n")
+	fmt.Printf("%-50s%s", "--mempool", "Print the tx hashes in the mempool\n")
 }
 
 func (cli *CommandLine) ValidateArgs() {
 	if len(os.Args) == 1 {
 		cli.PrintUsage()
+		os.Exit(1)
 	}
 	if len(os.Args) == 2 {
 		if os.Args[1] == "-h" || os.Args[1] == "--help" {
 			cli.PrintUsage()
+			os.Exit(1)
 		}
 	}
 	switch os.Args[1] {
@@ -79,6 +79,8 @@ func (cli *CommandLine) ValidateArgs() {
 		cli.Run()
 	case "node":
 		cli.Node()
+	case "genesis":
+		cli.Genesis()
 	case "wallet":
 		cli.Wallet()
 	case "blockchain":
@@ -103,12 +105,6 @@ func (cli *CommandLine) Run() {
 	flag.IntVar(&numTx, "numTx", 10, "")
 	flag.StringVar(&addr, "nodeAddr", "", "")
 	flag.IntVar(&port, "port", int(t_config.RpcEndpointPort), "")
-
-	if addr == "" {
-		fmt.Println("Missing node address")
-		cli.PrintUsage()
-		os.Exit(1)
-	}
 
 	_numTx := uint8(numTx)
 	_port := uint16(port)
@@ -148,7 +144,7 @@ func (cli *CommandLine) Node() {
 	flag.BoolVar(&writeBlk, "writeBlk", false, "")
 	flag.BoolVar(&createBlk, "createBlk", false, "")
 	flag.StringVar(&mineBlk, "mineBlk", EMPTY_STRING_ARG, "")
-	flag.StringVar(&valideBlk, "valideBlk", EMPTY_STRING_ARG, "")
+	flag.StringVar(&valideBlk, "validateBlk", EMPTY_STRING_ARG, "")
 	flag.StringVar(&addBlk, "addBlk", EMPTY_STRING_ARG, "")
 	flag.StringVar(&broadcastBlk, "broadcastBlk", EMPTY_STRING_ARG, "")
 	flag.StringVar(&validateTx, "validateTx", EMPTY_STRING_ARG, "")
@@ -168,30 +164,18 @@ func (cli *CommandLine) Node() {
 		os.Exit(1)
 	}
 
-	if addr == "" {
-		fmt.Println("Missing node address")
-		cli.PrintUsage()
-		os.Exit(1)
-	}
-
 	_numTx := uint8(numTx)
 	_port := uint16(port)
 	nodeConf := t_config.Config{
 		NumTxInBlock: &_numTx,
 		RpcEndpointPort: &_port,
 		ClientAddress: &addr,
-
 	}
 
 	node := node.NewNode(cli.ctx, &nodeConf)
 
 	if readBlk != "" {
 		node.ReadTmpBlock(readBlk)
-	}
-
-	if writeBlk {
-		cli.checkNodeBlock(node)
-		node.WriteTmpBlock()
 	}
 
 	if createBlk {
@@ -269,6 +253,11 @@ func (cli *CommandLine) Node() {
 			node.SetBlock(node.ReadTmpBlock(addTxsToUtxos))
 		}
 		node.UpdateUtxoSet()
+	}
+
+	if writeBlk {
+		cli.checkNodeBlock(node)
+		node.WriteTmpBlock()
 	}
 }
 
@@ -360,11 +349,6 @@ func (cli *CommandLine) Genesis() {
 	flag.StringVar(&nodeAddr, "nodeAddr", "", "")
 
 	flag.CommandLine.Parse(os.Args[2:])
-
-	if nodeAddr == "" {
-		cli.PrintUsage()
-		os.Exit(1)
-	}
 
 	_numTx := uint8(10)
 	_port := uint16(t_config.RpcEndpointPort)

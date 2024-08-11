@@ -56,9 +56,9 @@ func (pow *PoW) Solve(block *block.Block, restart chan byte) bool {
 	return false
 }
 
-func (pow *PoW) Validate(target big.Int, hash []byte) bool {
-
-	return target.Cmp(new(big.Int).SetBytes(hash)) == 1
+func (pow *PoW) Validate(target uint8, hash []byte) bool {
+	targetVal := new(big.Int).Lsh(big.NewInt(1), uint(255 - target + 1))
+	return targetVal.Cmp(new(big.Int).SetBytes(hash)) == 1
 }
 
 func (pow *PoW) Close() {

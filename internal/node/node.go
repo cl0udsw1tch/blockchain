@@ -84,7 +84,7 @@ func NewNode(ctx *t_config.Context, newConf *t_config.Config) *Node {
 		node.txValidator)
 	
 	node.miner = miner.NewMiner(node.ctx, node.blockchain, node.mempool)
-	node.server.Run()
+	
 	return node
 }
 
@@ -118,7 +118,7 @@ func (node *Node) readBlock(path string) *block.Block {
 	b, err := os.ReadFile(path)
 	t_error.LogErr(err)
 	buffer := new(bytes.Buffer)
-	buffer.Write(b[:len(b) - 32])
+	buffer.Write(b)
 	dec := block.NewBlockDecoder(nil)
 	err = dec.Decode(buffer)
 	t_error.LogErr(err)
@@ -137,7 +137,8 @@ func (node *Node) WriteBlock() {
 
 func (node *Node) writeBlock(path string) {
 	b := node.block.Serialize()
-	os.WriteFile(path, b, 0600)
+	err := os.WriteFile(path, b, 0600)
+	t_error.LogErr(err)
 }
 
 func (node *Node) DeleteTmpBlock(hash string) {
@@ -175,6 +176,7 @@ func (node *Node) DeleteTmpTx(hash string) {
 
 func (node *Node) Run() {
 
+	node.server.Run()
 	node.CreateBlock(make([]byte, 0))
 	node.StartMiner()
 
@@ -186,6 +188,7 @@ func (node *Node) Run() {
 			node.server.Block().InStream<- node.block
 			node.UpdateUtxoSet()
 			node.UpdateTxIndex()
+			node.AddBlock()
 			node.CreateBlock(make([]byte, 0))
 
 		case tx := <-node.server.Tx().OutStream :
@@ -328,4 +331,5 @@ func (node *Node) Broadcast() {
 
 func (node *Node) Genesis() {
 	node.block = node.miner.Genesis()
+	node.UpdateUtxoSet()
 }

@@ -47,7 +47,7 @@ func (miner *Miner) Genesis() *block.Block {
 			Version:   t_config.Version,
 			PrevHash:  make([]byte, 32),
 			TimeStamp: uint32(time.Now().Unix()),
-			Target:    *t_config.Target,
+			Target:    t_config.NBits,
 		},
 		TXCount:      1,
 		Transactions: []transaction.Tx{miner.CoinbaseTx(uint32(t_config.Version), transaction.NewCompactSize(0), make([]byte, 0))},
@@ -67,8 +67,9 @@ func (miner *Miner) CreateBlock(coinbaseSript []byte) *block.Block {
 	header := block.Header{
 		Version:   t_config.Version,
 		PrevHash:  miner.blockchain.LastMeta().Hash,
-		Target:    *t_config.Target,
+		Target:    t_config.NBits,
 		TimeStamp: uint32(time.Now().Unix()),
+		MerkleRootHash: make([]byte, 32),
 	}
 
 	return &block.Block{
@@ -147,7 +148,6 @@ func (miner *Miner) MineFromMempool(block *block.Block) {
 				// where this node attempts to mine the block
 				if miner.Mine(miner.Signal.SolveSignal.Reset, block) {
 					miner.Signal.SolveSignal.SignalReady()
-					miner.AddBlock(block)
 				}
 			}
 		}

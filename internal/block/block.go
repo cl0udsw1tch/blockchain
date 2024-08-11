@@ -1,7 +1,6 @@
 package block
 
 import (
-	"math/big"
 	"github.com/terium-project/terium/internal/t_util"
 	"github.com/terium-project/terium/internal/transaction"
 )
@@ -12,7 +11,7 @@ type Header struct{
 	PrevHash	 	[]byte // 32 bytes
 	MerkleRootHash	[]byte // 32 bytes
 	TimeStamp		uint32
-	Target 			big.Int
+	Target 			uint8
 	Nonce			uint32
 }
 

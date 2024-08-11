@@ -11,7 +11,7 @@ import (
 
 const (
 	Version           int32 = 0x01
-	NBits             uint8 = 20
+	NBits             uint8 = 15
 	COINBASE_MATURITY uint8 = 100
 	BLOCK_REWARD      int64 = 100_000
 )
@@ -104,6 +104,18 @@ func (ctx *Context) GetPaths() error {
 	} else if err != nil {
 		return err
 	}
+	b := path.Join(root, ".tmp", "blocks")
+	if _, err := os.Stat(b); os.IsNotExist(err) {
+		os.Mkdir(b, os.FileMode(0777))
+	} else if err != nil {
+		return err
+	}
+	t := path.Join(root, ".tmp", "txs")
+	if _, err := os.Stat(t); os.IsNotExist(err) {
+		os.Mkdir(t, os.FileMode(0777))
+	} else if err != nil {
+		return err
+	}
 	ctx.WalletDir = path.Join(root, "wallets")
 	if _, err := os.Stat(ctx.WalletDir); os.IsNotExist(err) {
 		os.Mkdir(ctx.WalletDir, os.FileMode(0777))
@@ -125,8 +137,6 @@ func (ctx *Context) GetPaths() error {
 }
 
 func (ctx *Context) GetConfig() {
-
-	Target = new(big.Int).Lsh(big.NewInt(1), uint(255 - NBits + 1))
 
 	conf, err := os.ReadFile(ctx.ConfigPath)
 	t_error.LogErr(err)

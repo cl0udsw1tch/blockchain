@@ -3,9 +3,6 @@ package block
 import (
 	"bytes"
 	"encoding/binary"
-	"math/big"
-
-	"github.com/terium-project/terium/internal/t_config"
 	"github.com/terium-project/terium/internal/transaction"
 )
 
@@ -53,9 +50,7 @@ func (d *HeaderDecoder) Decode(buffer *bytes.Buffer) error {
 	d.header.PrevHash = buffer.Next(32)
 	d.header.MerkleRootHash = buffer.Next(32)
 	d.header.TimeStamp = binary.BigEndian.Uint32(buffer.Next(4))
-	d.header.Target = big.Int{}
-	nbits := buffer.Next(1)[0]
-	d.header.Target = *new(big.Int).Lsh(big.NewInt(1), uint(255 - nbits + 1))
+	d.header.Target = buffer.Next(1)[0]
 	d.header.Nonce = binary.BigEndian.Uint32(buffer.Next(4))
 	
 	return nil
@@ -90,7 +85,7 @@ func (e *HeaderEncoder) Encode(header *Header) {
 	binary.Write(e.buffer, binary.BigEndian, header.PrevHash)
 	binary.Write(e.buffer, binary.BigEndian, header.MerkleRootHash)
 	binary.Write(e.buffer, binary.BigEndian, header.TimeStamp)
-	binary.Write(e.buffer, binary.BigEndian, t_config.NBits)
+	binary.Write(e.buffer, binary.BigEndian, header.Target)
 	binary.Write(e.buffer, binary.BigEndian, header.Nonce)
 }
 
@@ -124,10 +119,11 @@ func (d *BlockDecoder) Clear() {
 
 func (d *BlockDecoder) Decode(buffer *bytes.Buffer) error {
 {}
-	headerDecoder := NewHeaderDecoder(&d.block.Header)
+	headerDecoder := NewHeaderDecoder(nil)
 	if err := headerDecoder.Decode(buffer); err != nil {
 		return BAD_BLOCK_ERR{}
 	}
+	d.block.Header = *headerDecoder.Out()
 	if buffer.Len() < 4 {
 		return BAD_BLOCK_ERR{}
 	}

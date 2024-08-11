@@ -192,10 +192,8 @@ func (e *ScriptEncoder) Encode(s *ScriptBase) {
 
 	binary.Write(e.buffer, binary.BigEndian, s.Size.Type)
 	binary.Write(e.buffer, binary.BigEndian, s.Size.Size)
-
-	for _, a := range s.Script {
-		binary.Write(e.buffer, binary.BigEndian, a)
-	}
+	binary.Write(e.buffer, binary.BigEndian, s.Script)
+	
 }
 
 func (e *ScriptEncoder) Bytes() []byte {
