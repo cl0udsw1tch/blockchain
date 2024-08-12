@@ -3,12 +3,13 @@ package block
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/terium-project/terium/internal/transaction"
+
+	"github.com/tiereum/trmnode/internal/transaction"
 )
 
 type (
-	BAD_HEADER_ERR struct {}
-	BAD_BLOCK_ERR struct {}
+	BAD_HEADER_ERR struct{}
+	BAD_BLOCK_ERR  struct{}
 )
 
 func (e BAD_HEADER_ERR) Error() string {
@@ -28,7 +29,7 @@ type HeaderDecoder struct {
 
 func NewHeaderDecoder(header *Header) *HeaderDecoder {
 	dec := new(HeaderDecoder)
-	if header == nil {	
+	if header == nil {
 		dec.header = new(Header)
 	} else {
 		dec.header = header
@@ -42,7 +43,7 @@ func (d *HeaderDecoder) Clear() {
 
 func (d *HeaderDecoder) Decode(buffer *bytes.Buffer) error {
 
-	if buffer.Len() < 4 + 32 + 32 + 4 + 1 + 4 {
+	if buffer.Len() < 4+32+32+4+1+4 {
 		return BAD_HEADER_ERR{}
 	}
 
@@ -52,7 +53,7 @@ func (d *HeaderDecoder) Decode(buffer *bytes.Buffer) error {
 	d.header.TimeStamp = binary.BigEndian.Uint32(buffer.Next(4))
 	d.header.Target = buffer.Next(1)[0]
 	d.header.Nonce = binary.BigEndian.Uint32(buffer.Next(4))
-	
+
 	return nil
 }
 
@@ -68,7 +69,7 @@ type HeaderEncoder struct {
 
 func NewHeaderEncoder(buffer *bytes.Buffer) *HeaderEncoder {
 	enc := new(HeaderEncoder)
-	if buffer == nil {	
+	if buffer == nil {
 		enc.buffer = new(bytes.Buffer)
 	} else {
 		enc.buffer = buffer
@@ -95,7 +96,6 @@ func (e *HeaderEncoder) Bytes() []byte {
 
 // Header codec ================================== //
 
-
 // Block codec ================================== //
 
 // **** DECODER **** //
@@ -105,7 +105,7 @@ type BlockDecoder struct {
 
 func NewBlockDecoder(block *Block) *BlockDecoder {
 	dec := new(BlockDecoder)
-	if block == nil {	
+	if block == nil {
 		dec.block = new(Block)
 	} else {
 		dec.block = block
@@ -118,7 +118,8 @@ func (d *BlockDecoder) Clear() {
 }
 
 func (d *BlockDecoder) Decode(buffer *bytes.Buffer) error {
-{}
+	{
+	}
 	headerDecoder := NewHeaderDecoder(nil)
 	if err := headerDecoder.Decode(buffer); err != nil {
 		return BAD_BLOCK_ERR{}
@@ -130,7 +131,7 @@ func (d *BlockDecoder) Decode(buffer *bytes.Buffer) error {
 	d.block.TXCount = binary.BigEndian.Uint32(buffer.Next(4))
 
 	txDec := transaction.NewTxDecoder(nil)
-	
+
 	var i uint32 = 0
 	for i < d.block.TXCount {
 		txDec.Clear()
@@ -156,7 +157,7 @@ type BlockEncoder struct {
 
 func NewBlockEncoder(buffer *bytes.Buffer) *BlockEncoder {
 	enc := new(BlockEncoder)
-	if buffer == nil {	
+	if buffer == nil {
 		enc.buffer = new(bytes.Buffer)
 	} else {
 		enc.buffer = buffer
@@ -164,7 +165,7 @@ func NewBlockEncoder(buffer *bytes.Buffer) *BlockEncoder {
 	return enc
 }
 
-func (e *BlockEncoder) Clear(){
+func (e *BlockEncoder) Clear() {
 	e.buffer = new(bytes.Buffer)
 }
 
@@ -184,6 +185,5 @@ func (e *BlockEncoder) Encode(block *Block) {
 func (e *BlockEncoder) Bytes() []byte {
 	return e.buffer.Bytes()
 }
-
 
 // Block codec ================================== //

@@ -9,9 +9,9 @@ import (
 	"os"
 	"path"
 
-	"github.com/terium-project/terium/internal/block"
-	"github.com/terium-project/terium/internal/t_config"
-	"github.com/terium-project/terium/internal/t_error"
+	"github.com/tiereum/trmnode/internal/block"
+	"github.com/tiereum/trmnode/internal/t_config"
+	"github.com/tiereum/trmnode/internal/t_error"
 )
 
 type CorruptBlockErr struct{}
@@ -27,12 +27,12 @@ type BlockMetaData struct {
 }
 
 type BlockIO struct {
-	ctx   *t_config.Context
+	ctx *t_config.Context
 }
 
 func NewBlockIO(ctx *t_config.Context) *BlockIO {
 	return &BlockIO{
-		ctx:  ctx,
+		ctx: ctx,
 	}
 }
 
@@ -73,8 +73,6 @@ func (b *BlockIO) Read(hash []byte) *block.Block {
 	return blockDecoder.Out()
 }
 
-
-
 func (b *BlockIO) Checksum(blockBytes []byte) []byte {
 	sum := sha256.Sum256(blockBytes)
 	return sum[:]
@@ -87,7 +85,7 @@ func (b *BlockIO) Check(_bytes, sum []byte) bool {
 
 }
 
-func (b *BlockIO) Update(block *block.Block, hash []byte)  {
+func (b *BlockIO) Update(block *block.Block, hash []byte) {
 	b.Delete(hash)
 	b.Write(block, hash)
 }
@@ -97,7 +95,6 @@ func (b *BlockIO) Delete(hash []byte) {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		t_error.LogWarn(errors.New("file does not exist, cant delete"))
 		return
-	} 
+	}
 	t_error.LogErr(os.Remove(path))
 }
-

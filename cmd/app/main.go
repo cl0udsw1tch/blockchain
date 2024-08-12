@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/terium-project/terium/cmd/cli"
-	"github.com/terium-project/terium/internal/t_config"
+	"github.com/tiereum/trmnode/cmd/cli"
+	"github.com/tiereum/trmnode/internal/t_config"
 )
 
 func main() {

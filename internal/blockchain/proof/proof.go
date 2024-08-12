@@ -3,24 +3,23 @@ package proof
 import (
 	"math/big"
 
-	"github.com/terium-project/terium/internal/block"
-	"github.com/terium-project/terium/internal/t_error"
+	"github.com/tiereum/trmnode/internal/block"
+	"github.com/tiereum/trmnode/internal/t_error"
 )
 
-type NoNonceError struct {}
+type NoNonceError struct{}
 
 func (n NoNonceError) Error() string {
 	return "Nonce not found."
 }
 
 type PoWState struct {
-	Hash []byte
-	Nonce uint32
+	Hash   []byte
+	Nonce  uint32
 	Solved bool
-} 
+}
 
 type PoWStateNotifier chan PoWState
-
 
 type PoW struct {
 	Notifier PoWStateNotifier
@@ -36,28 +35,28 @@ func (pow *PoW) Solve(block *block.Block, restart chan byte) bool {
 
 	for state.Nonce < (1<<32 - 1) {
 		select {
-		case <-restart :
+		case <-restart:
 			return false
-		default : 
+		default:
 			block.Header.Nonce = state.Nonce
 			state.Hash = block.Hash()
 
 			if pow.Validate(block.Header.Target, state.Hash) {
 				state.Solved = true
 				pow.Notifier <- state
-				return  true
+				return true
 			}
 			pow.Notifier <- state
 			state.Nonce++
 		}
 	}
-	
+
 	t_error.LogErr(NoNonceError{})
 	return false
 }
 
 func (pow *PoW) Validate(target uint8, hash []byte) bool {
-	targetVal := new(big.Int).Lsh(big.NewInt(1), uint(255 - target + 1))
+	targetVal := new(big.Int).Lsh(big.NewInt(1), uint(255-target+1))
 	return targetVal.Cmp(new(big.Int).SetBytes(hash)) == 1
 }
 

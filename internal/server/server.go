@@ -3,11 +3,11 @@ package server
 import (
 	"errors"
 
-	"github.com/terium-project/terium/internal/block"
-	"github.com/terium-project/terium/internal/network"
-	"github.com/terium-project/terium/internal/t_config"
-	"github.com/terium-project/terium/internal/t_error"
-	"github.com/terium-project/terium/internal/transaction"
+	"github.com/tiereum/trmnode/internal/block"
+	"github.com/tiereum/trmnode/internal/network"
+	"github.com/tiereum/trmnode/internal/t_config"
+	"github.com/tiereum/trmnode/internal/t_error"
+	"github.com/tiereum/trmnode/internal/transaction"
 )
 
 const (

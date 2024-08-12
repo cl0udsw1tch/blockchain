@@ -3,19 +3,20 @@ package blockchain
 import (
 	"errors"
 	"math/big"
-	"github.com/terium-project/terium/internal/block"
-	"github.com/terium-project/terium/internal/blockStore"
-	"github.com/terium-project/terium/internal/t_config"
-	"github.com/terium-project/terium/internal/t_error"
-	"github.com/terium-project/terium/internal/transaction"
-	"github.com/terium-project/terium/internal/utxoSet"
+
+	"github.com/tiereum/trmnode/internal/block"
+	"github.com/tiereum/trmnode/internal/blockStore"
+	"github.com/tiereum/trmnode/internal/t_config"
+	"github.com/tiereum/trmnode/internal/t_error"
+	"github.com/tiereum/trmnode/internal/transaction"
+	"github.com/tiereum/trmnode/internal/utxoSet"
 )
 
 type Blockchain struct {
-	ctx *t_config.Context
+	ctx        *t_config.Context
 	blockStore *blockStore.BlockStore
-	lastMeta *blockStore.BlockMetaData
-	iter *BlockchainIterator
+	lastMeta   *blockStore.BlockMetaData
+	iter       *BlockchainIterator
 }
 
 func NewBlockchain(ctx *t_config.Context, store *blockStore.BlockStore) *Blockchain {
@@ -68,11 +69,9 @@ func (blockchain *Blockchain) AddBlock(block *block.Block) {
 	blockchain.lastMeta = &metadata
 }
 
-
 func (blockchain *Blockchain) Block(hash []byte) (*block.Block, *blockStore.BlockMetaData) {
 	return blockchain.blockStore.Read(hash)
 }
-
 
 func (blockchain *Blockchain) LastMeta() *blockStore.BlockMetaData {
 	return blockchain.lastMeta
@@ -106,13 +105,12 @@ func (blockchain *Blockchain) GetFee(tx *transaction.Tx) int64 {
 	return sumOut - sumIn
 }
 
-
 type BlockchainIterator struct {
-	valid 		bool
-	block    	*block.Block
-	metadata 	*blockStore.BlockMetaData
-	store 		*blockStore.BlockStore
-	start 		bool
+	valid    bool
+	block    *block.Block
+	metadata *blockStore.BlockMetaData
+	store    *blockStore.BlockStore
+	start    bool
 }
 
 func NewBlockchainIterator(store *blockStore.BlockStore) *BlockchainIterator {
@@ -132,7 +130,7 @@ func (iter *BlockchainIterator) Next() {
 		iter.start = false
 		block, meta, err := iter.store.ReadLast()
 		if err == blockStore.ErrNoBlocksRemaining {
-			return 
+			return
 		}
 		iter.block = block
 		iter.metadata = meta
@@ -156,7 +154,6 @@ func (iter *BlockchainIterator) Block() *block.Block {
 func (iter *BlockchainIterator) Metadata() *blockStore.BlockMetaData {
 	return iter.metadata
 }
-
 
 func (blockchain *Blockchain) Height() big.Int {
 	return blockchain.lastMeta.Height

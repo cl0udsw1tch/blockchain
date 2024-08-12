@@ -6,7 +6,7 @@ import (
 	"os"
 	"path"
 
-	"github.com/terium-project/terium/internal/t_error"
+	"github.com/tiereum/trmnode/internal/t_error"
 )
 
 const (
@@ -68,7 +68,7 @@ func NewContext() *Context {
 	ctx.NodeConfig = &Config{}
 	t_error.LogErr(ctx.GetPaths())
 	ctx.GetConfig()
-	return ctx 
+	return ctx
 }
 
 func (ctx *Context) GetPaths() error {
@@ -153,7 +153,7 @@ func (ctx *Context) GetConfig() {
 	if ctx.NodeConfig.RpcEndpointPort == nil {
 		ctx.NodeConfig.RpcEndpointPort = &RpcEndpointPort
 		changed = true
-	} 
+	}
 
 	if changed {
 		bytes, err := json.Marshal(ctx.NodeConfig)

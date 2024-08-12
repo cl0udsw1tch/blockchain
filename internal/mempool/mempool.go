@@ -6,10 +6,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+
+	"github.com/tiereum/trmnode/internal/t_config"
+	"github.com/tiereum/trmnode/internal/t_error"
+	"github.com/tiereum/trmnode/internal/transaction"
+
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/terium-project/terium/internal/t_config"
-	"github.com/terium-project/terium/internal/t_error"
-	"github.com/terium-project/terium/internal/transaction"
 )
 
 type MempoolMetadata struct {
@@ -26,7 +28,7 @@ func NewMempoolIO(ctx *t_config.Context) *MempoolIO {
 	store := new(MempoolIO)
 	store.ctx = ctx
 	var err error
-	
+
 	store.db, err = sql.Open("sqlite3", ":memory:")
 	t_error.LogErr(err)
 	bytes, err := os.ReadFile("./internal/mempool/mempool.sql")
@@ -49,7 +51,7 @@ func (store *MempoolIO) Read(hash []byte) (*transaction.Tx, int64, bool) {
 
 	query := fmt.Sprintf("SELECT tx, fee FROM tierium.mempool WHERE txid='%s';", hex.EncodeToString(hash))
 	row := store.db.QueryRow(query)
-	
+
 	if row.Err() != nil {
 		return nil, 0, false
 	}
@@ -104,7 +106,6 @@ func (store *MempoolIO) GetTxByPriority(required int64) []transaction.Tx {
 	txids := make([]string, count)
 	buffer := new(bytes.Buffer)
 	dec := transaction.NewTxDecoder(nil)
-
 
 	i := 0
 	for rows.Next() {

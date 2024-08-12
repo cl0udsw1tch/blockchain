@@ -6,15 +6,16 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"github.com/terium-project/terium/internal/node"
-	"github.com/terium-project/terium/internal/t_config"
-	"github.com/terium-project/terium/internal/t_error"
-	"github.com/terium-project/terium/internal/wallet"
+
+	"github.com/tiereum/trmnode/internal/node"
+	"github.com/tiereum/trmnode/internal/t_config"
+	"github.com/tiereum/trmnode/internal/t_error"
+	"github.com/tiereum/trmnode/internal/wallet"
 )
 
 const EMPTY_STRING_ARG string = "NA"
 
-type CommandLine struct{
+type CommandLine struct {
 	ctx *t_config.Context
 }
 
@@ -84,11 +85,11 @@ func (cli *CommandLine) ValidateArgs() {
 	case "interactive":
 		os.Exit(1)
 		cli.Interactive()
-	default : 
+	default:
 		cli.PrintUsage()
 		os.Exit(1)
 	}
-	
+
 }
 
 func (cli *CommandLine) Run() {
@@ -99,7 +100,7 @@ func (cli *CommandLine) Run() {
 }
 
 func (cli *CommandLine) Node() {
-	
+
 	nodeConf, args := cli.extractConf()
 	node := node.NewNode(cli.ctx, nodeConf)
 
@@ -109,41 +110,41 @@ func (cli *CommandLine) Node() {
 	for i < N {
 		arg := args[i]
 		switch arg {
-		case "" : 
-		 	//skip
-		case "--readBlk", "-r" : 
+		case "":
+			//skip
+		case "--readBlk", "-r":
 			cli.assertMoreArgs(i, N)
 			block := node.ReadTmpBlock(args[i+1])
 			node.SetBlock(block)
-			i+=2
-		case "--writeBlk", "-w" :
+			i += 2
+		case "--writeBlk", "-w":
 			cli.getBlockFromArg(&i, args, node)
 			node.WriteTmpBlock()
-		case "--createBlk", "-c" : 
+		case "--createBlk", "-c":
 			node.CreateBlock(make([]byte, 0))
 			i++
-		case "--mineBlk", "-m" : 
+		case "--mineBlk", "-m":
 			cli.getBlockFromArg(&i, args, node)
 			node.Mine()
-		case "--validateBlk", "-v" : 
+		case "--validateBlk", "-v":
 			cli.getBlockFromArg(&i, args, node)
 			node.ValidateBlock()
-		case "--addBlk", "-d" : 
+		case "--addBlk", "-d":
 			cli.getBlockFromArg(&i, args, node)
 			node.AddBlock()
-		case "--updateUtxoSet", "-u" : 
+		case "--updateUtxoSet", "-u":
 			cli.getBlockFromArg(&i, args, node)
 			node.UpdateUtxoSet()
-		case "--broadcastBlk", "-b" : 
+		case "--broadcastBlk", "-b":
 			cli.getBlockFromArg(&i, args, node)
 			node.Broadcast()
-		case "--validateTx", "-t" : 
+		case "--validateTx", "-t":
 			cli.getTxFromArg(&i, args, node)
 			node.ValidateTx()
-		case "--addTxToPool", "-o" : 
+		case "--addTxToPool", "-o":
 			cli.getTxFromArg(&i, args, node)
 			node.AddTxToPool()
-		case "--addTxToBlk", "-k" : 
+		case "--addTxToBlk", "-k":
 			cli.getTxFromArg(&i, args, node)
 			node.AddTxToBlock()
 		default:
@@ -153,15 +154,13 @@ func (cli *CommandLine) Node() {
 	}
 }
 
-
 func (cli *CommandLine) Interactive() {
 
 }
 
-
 func (cli *CommandLine) Wallet() {
 	name := ""
-	args := make([]string, len(os.Args) - 2)
+	args := make([]string, len(os.Args)-2)
 	copy(args, os.Args[2:])
 
 	i := 0
@@ -173,12 +172,13 @@ func (cli *CommandLine) Wallet() {
 			name = args[i+1]
 			args[i] = ""
 			args[i+1] = ""
-			i+=2
-		default: i++
+			i += 2
+		default:
+			i++
 		}
 		if name != "" {
 			break
-		} 
+		}
 	}
 	if name == "" {
 		fmt.Println("name of wallet required")
@@ -237,7 +237,7 @@ func (cli *CommandLine) ParseTx(tx string) ([]string, []int64) {
 		v[i], err = strconv.ParseInt(s[1], 10, 64)
 		t_error.LogErr(err)
 	}
-	return a,v
+	return a, v
 }
 
 func (cli *CommandLine) Genesis() {
@@ -250,9 +250,9 @@ func (cli *CommandLine) Genesis() {
 	_numTx := uint8(10)
 	_port := uint16(t_config.RpcEndpointPort)
 	nodeConf := t_config.Config{
-		NumTxInBlock: &_numTx,
+		NumTxInBlock:    &_numTx,
 		RpcEndpointPort: &_port,
-		ClientAddress: &nodeAddr,
+		ClientAddress:   &nodeAddr,
 	}
 
 	node := node.NewNode(cli.ctx, &nodeConf)
@@ -283,9 +283,9 @@ func (cli *CommandLine) extractConf() (*t_config.Config, []string) {
 	nodeAddr := ""
 	var port uint16 = t_config.RpcEndpointPort
 
-	args := make([]string, len(os.Args) - 2)
+	args := make([]string, len(os.Args)-2)
 	copy(args, os.Args[2:])
-	
+
 	i := 0
 	N := len(args)
 
@@ -302,15 +302,15 @@ func (cli *CommandLine) extractConf() (*t_config.Config, []string) {
 				numTx = uint8(_numTx)
 				args[i] = ""
 				args[i+1] = ""
-				i+=2
+				i += 2
 			}
-		case "--nodeAddr", "-a" :
+		case "--nodeAddr", "-a":
 			cli.assertMoreArgs(i, N)
 			nodeAddr = os.Args[i+1]
 			args[i] = ""
 			args[i+1] = ""
-			i+=2
-		case "--port", "-p" :
+			i += 2
+		case "--port", "-p":
 			cli.assertMoreArgs(i, N)
 			_port, err := strconv.Atoi(os.Args[i+1])
 			if err != nil {
@@ -320,16 +320,16 @@ func (cli *CommandLine) extractConf() (*t_config.Config, []string) {
 				port = uint16(_port)
 				args[i] = ""
 				args[i+1] = ""
-				i+=2
+				i += 2
 			}
 		default:
 			i++
 		}
 	}
 	nodeConf := t_config.Config{
-		NumTxInBlock: &numTx,
+		NumTxInBlock:    &numTx,
 		RpcEndpointPort: &port,
-		ClientAddress: &nodeAddr,
+		ClientAddress:   &nodeAddr,
 	}
 	return &nodeConf, args
 }
@@ -344,7 +344,7 @@ func (cli *CommandLine) assertMoreArgs(argI, N int) {
 func (cli *CommandLine) getBlockFromArg(i *int, args []string, node *node.Node) {
 	if node.GetBlock() == nil {
 		node.SetBlock(node.ReadTmpBlock(args[*i+1]))
-		(*i)+=2
+		(*i) += 2
 	} else {
 		(*i)++
 	}
@@ -353,7 +353,7 @@ func (cli *CommandLine) getBlockFromArg(i *int, args []string, node *node.Node) 
 func (cli *CommandLine) getTxFromArg(i *int, args []string, node *node.Node) {
 	if node.GetTx() == nil {
 		node.SetTx(node.ReadTmpTx(args[*i+1]))
-		(*i)+=2
+		(*i) += 2
 	} else {
 		(*i)++
 	}

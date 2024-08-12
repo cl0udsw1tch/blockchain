@@ -3,7 +3,7 @@ package server
 import (
 	"bytes"
 
-	"github.com/terium-project/terium/internal/transaction"
+	"github.com/tiereum/trmnode/internal/transaction"
 )
 
 type _TxStream struct {

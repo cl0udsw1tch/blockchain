@@ -7,8 +7,10 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
-	"github.com/terium-project/terium/internal/t_error"
-	"github.com/terium-project/terium/internal/t_util"
+
+	"github.com/tiereum/trmnode/internal/t_error"
+	"github.com/tiereum/trmnode/internal/t_util"
+
 	"golang.org/x/crypto/ripemd160"
 )
 
@@ -34,14 +36,12 @@ func HashPublicKey(pk *ecdsa.PublicKey) []byte {
 
 func MakeAddress(pkhash []byte) string {
 	address := append([]byte{0x00}, pkhash...) // 1 byte version
-	hash := t_util.Hash256(address) // double sha256 hash
+	hash := t_util.Hash256(address)            // double sha256 hash
 	checksum := hash[:4]
 	address = append(address, checksum...)
 	addressString := hex.EncodeToString(address)
 	return addressString
 }
-
-
 
 func Verify(msghash, sig []byte, pk *ecdsa.PublicKey) bool {
 	return ecdsa.VerifyASN1(pk, msghash, sig)

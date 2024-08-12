@@ -6,10 +6,11 @@ import (
 	"errors"
 	"path"
 
+	"github.com/tiereum/trmnode/internal/t_config"
+	"github.com/tiereum/trmnode/internal/t_error"
+	"github.com/tiereum/trmnode/internal/transaction"
+
 	"github.com/dgraph-io/badger/v4"
-	"github.com/terium-project/terium/internal/t_config"
-	"github.com/terium-project/terium/internal/t_error"
-	"github.com/terium-project/terium/internal/transaction"
 )
 
 type UtxoStore struct {

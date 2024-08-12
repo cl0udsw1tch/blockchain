@@ -5,13 +5,13 @@ import (
 	"encoding/hex"
 	"sync"
 
-	"github.com/terium-project/terium/internal/client"
-	"github.com/terium-project/terium/internal/server"
-	"github.com/terium-project/terium/internal/t_config"
-	"github.com/terium-project/terium/internal/t_error"
-	"github.com/terium-project/terium/internal/t_util"
-	"github.com/terium-project/terium/internal/transaction"
-	"github.com/terium-project/terium/internal/utxoSet"
+	"github.com/tiereum/trmnode/internal/client"
+	"github.com/tiereum/trmnode/internal/server"
+	"github.com/tiereum/trmnode/internal/t_config"
+	"github.com/tiereum/trmnode/internal/t_error"
+	"github.com/tiereum/trmnode/internal/t_util"
+	"github.com/tiereum/trmnode/internal/transaction"
+	"github.com/tiereum/trmnode/internal/utxoSet"
 )
 
 type WalletController struct {
@@ -88,21 +88,21 @@ func (w *WalletController) GenP2PKH(
 		go func(i int) {
 			defer wg.Done()
 			lockingScript := []byte{
-				byte(transaction.OP_DUP),         // 1
-				byte(transaction.OP_HASH160),     // 1
-				byte(transaction.OP_PUSHDATA1),   // 1
+				byte(transaction.OP_DUP),       // 1
+				byte(transaction.OP_HASH160),   // 1
+				byte(transaction.OP_PUSHDATA1), // 1
 				byte(0x14),
 			}
 			lockingScript = append(lockingScript, []byte(recipientAddrs[i])[1:21]...)
 			lockingScript = append(lockingScript, byte(transaction.OP_EQUALVERIFY),
-			byte(transaction.OP_CHECKSIG),)
-					
+				byte(transaction.OP_CHECKSIG))
+
 			outputs[i] = transaction.TxOut{
 				Value:             recipientVal[i],
 				LockingScriptSize: transaction.NewCompactSize(transaction.P2PKH_LOCK_SCRIPT_SZ),
-				LockingScript: lockingScript,
+				LockingScript:     lockingScript,
 			}
-			
+
 		}(i)
 	}
 	wg.Wait()
@@ -136,7 +136,7 @@ func (w *WalletController) SignTxIn(
 	}
 	tx.Inputs[inIdx].UnlockingScript = append(tx.Inputs[inIdx].UnlockingScript, sig...)
 	tx.Inputs[inIdx].UnlockingScript = append(tx.Inputs[inIdx].UnlockingScript, byte(transaction.OP_PUSHDATA1),
-	byte(nPk))
+		byte(nPk))
 	tx.Inputs[inIdx].UnlockingScript = append(tx.Inputs[inIdx].UnlockingScript, pk...)
 	tx.Inputs[inIdx].UnlockingScriptSize = transaction.NewCompactSize(int64(len(tx.Inputs[inIdx].UnlockingScript)))
 }
@@ -146,7 +146,7 @@ func (w *WalletController) SignTx(
 	inUTXO []*transaction.Utxo,
 	sigHashFlags []byte,
 ) {
-	 
+
 	for i := range inUTXO {
 		if sigHashFlags != nil {
 			w.SignTxIn(tx, uint8(len(inUTXO)), inUTXO[i], sigHashFlags[i])
@@ -179,5 +179,3 @@ func ValidateAddress(hexxAddr string) bool {
 	t_error.LogErr(err)
 	return bytes.Equal(t_util.Hash256(addrbytes[:len(addrbytes)-4])[:4], addrbytes[len(addrbytes)-4:])
 }
-
-

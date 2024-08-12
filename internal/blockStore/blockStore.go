@@ -1,10 +1,11 @@
 package blockStore
 
 import (
+	"github.com/tiereum/trmnode/internal/block"
+	"github.com/tiereum/trmnode/internal/t_config"
+	"github.com/tiereum/trmnode/internal/t_error"
+
 	"github.com/dgraph-io/badger/v4"
-	"github.com/terium-project/terium/internal/block"
-	"github.com/terium-project/terium/internal/t_config"
-	"github.com/terium-project/terium/internal/t_error"
 )
 
 type BlockStore struct {
@@ -30,10 +31,12 @@ func (store *BlockStore) Read(hash []byte) (*block.Block, *BlockMetaData) {
 	return block, &BlockMetaData{Hash: hash, Nonce: meta.Nonce, Height: meta.Height}
 }
 
-type ERR_NO_BLOCKS_REMAINING struct {}
+type ERR_NO_BLOCKS_REMAINING struct{}
+
 func (err ERR_NO_BLOCKS_REMAINING) Error() string {
 	return "Blockchain is empty"
 }
+
 var ErrNoBlocksRemaining ERR_NO_BLOCKS_REMAINING = ERR_NO_BLOCKS_REMAINING{}
 
 func (store *BlockStore) ReadLast() (*block.Block, *BlockMetaData, error) {

@@ -3,7 +3,7 @@ package server
 import (
 	"bytes"
 
-	"github.com/terium-project/terium/internal/block"
+	"github.com/tiereum/trmnode/internal/block"
 )
 
 type _BlockStream struct {

@@ -6,9 +6,11 @@ import (
 	"errors"
 	"math/big"
 	"path"
+
+	"github.com/tiereum/trmnode/internal/t_config"
+	"github.com/tiereum/trmnode/internal/t_error"
+
 	"github.com/dgraph-io/badger/v4"
-	"github.com/terium-project/terium/internal/t_config"
-	"github.com/terium-project/terium/internal/t_error"
 )
 
 type __metadata__ struct {
@@ -16,8 +18,8 @@ type __metadata__ struct {
 	Height big.Int
 }
 type IndexIO struct {
-	db       *badger.DB
-	ctx      *t_config.Context
+	db  *badger.DB
+	ctx *t_config.Context
 }
 
 func NewIndexIO(ctx *t_config.Context) *IndexIO {
@@ -60,7 +62,7 @@ func (store *IndexIO) ReadLast() (*BlockMetaData, error) {
 func (store *IndexIO) Write(meta *BlockMetaData) {
 	hash := meta.Hash
 	__meta := __metadata__{
-		Nonce: meta.Nonce,
+		Nonce:  meta.Nonce,
 		Height: meta.Height,
 	}
 	err := store.db.Update(func(txn *badger.Txn) error {
@@ -112,7 +114,6 @@ func (store *IndexIO) Read(hash []byte) *__metadata__ {
 	t_error.LogErr(err)
 	return metadata
 }
-
 
 func (store *IndexIO) Delete(hash []byte) {
 	err := store.db.Update(func(txn *badger.Txn) error {

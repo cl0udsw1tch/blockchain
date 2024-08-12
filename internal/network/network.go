@@ -6,31 +6,31 @@ import (
 	"net"
 	"os"
 	"path"
-	"github.com/terium-project/terium/internal/t_config"
-	"github.com/terium-project/terium/internal/t_error"
+
+	"github.com/tiereum/trmnode/internal/t_config"
+	"github.com/tiereum/trmnode/internal/t_error"
 )
 
 type Network struct {
-	ctx *t_config.Context
+	ctx     *t_config.Context
 	istream chan []byte
 	ostream chan []byte
-
 }
 
 func NewNetwork(ctx *t_config.Context) *Network {
-	
+
 	network := new(Network)
 	network.ctx = ctx
 	network.istream = make(chan []byte)
 	network.ostream = make(chan []byte)
-	
+
 	tablePath := path.Join(ctx.TmpDir, "nodeTable.txt")
 
-	f, err := os.OpenFile(tablePath, os.O_CREATE | os.O_APPEND | os.O_WRONLY, 0666)
+	f, err := os.OpenFile(tablePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
 	t_error.LogErr(err)
 	defer f.Close()
 	f.WriteString(fmt.Sprintf("%d\n", *ctx.NodeConfig.RpcEndpointPort))
-	
+
 	return network
 }
 
@@ -41,15 +41,14 @@ func (network *Network) Listen() {
 	t_error.LogErr(err)
 
 	defer listener.Close()
-	fmt.Println("Server listening on port " +  fmt.Sprint(network.ctx.NodeConfig.RpcEndpointPort) + "\n")
+	fmt.Println("Server listening on port " + fmt.Sprint(network.ctx.NodeConfig.RpcEndpointPort) + "\n")
 
 	for {
 		conn, err := listener.Accept()
 		t_error.LogErr(err)
 		go network.handleConn(conn)
 	}
-	
-	
+
 }
 
 func (network *Network) handleConn(conn net.Conn) {
@@ -82,7 +81,7 @@ func (network *Network) Broadcast() {
 		conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%s", port))
 		t_error.LogErr(err)
 		defer conn.Close()
-	
+
 		data := <-network.ostream
 		_, err = conn.Write(data)
 		t_error.LogErr(err)

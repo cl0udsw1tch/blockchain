@@ -4,8 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 
-	"github.com/terium-project/terium/internal/t_util"
-
+	"github.com/tiereum/trmnode/internal/t_util"
 )
 
 type OutPoint struct {
@@ -39,7 +38,7 @@ func NewCompactSize(val int64) CompactSize {
 	binary.Write(&buffer, binary.BigEndian, val)
 	sz := 0
 	bts := buffer.Bytes()
-	for sz < len(bts) && bts[len(buffer.Bytes()) - 1 - sz] != 0x00 {
+	for sz < len(bts) && bts[len(buffer.Bytes())-1-sz] != 0x00 {
 		sz++
 	}
 	if sz == 0 {

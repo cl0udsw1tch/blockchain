@@ -5,31 +5,31 @@ import (
 	"encoding/binary"
 	"math/big"
 
-	"github.com/terium-project/terium/internal/t_config"
-	"github.com/terium-project/terium/internal/blockStore"
-	"github.com/terium-project/terium/internal/blockchain"
-	"github.com/terium-project/terium/internal/mempool"
-	"github.com/terium-project/terium/internal/transaction"
-	"github.com/terium-project/terium/internal/utxoSet"
+	"github.com/tiereum/trmnode/internal/blockStore"
+	"github.com/tiereum/trmnode/internal/blockchain"
+	"github.com/tiereum/trmnode/internal/mempool"
+	"github.com/tiereum/trmnode/internal/t_config"
+	"github.com/tiereum/trmnode/internal/transaction"
+	"github.com/tiereum/trmnode/internal/utxoSet"
 )
 
 type TxValidator struct {
 	ctx        *t_config.Context
 	blockchain *blockchain.Blockchain
 	tx         *transaction.Tx
-	txStore 	*transaction.TxIndexIO
-	blockStore	*blockStore.BlockStore
-	mempool 	*mempool.MempoolIO
-	utxoStore 	*utxoSet.UtxoStore
+	txStore    *transaction.TxIndexIO
+	blockStore *blockStore.BlockStore
+	mempool    *mempool.MempoolIO
+	utxoStore  *utxoSet.UtxoStore
 }
 
 func NewTxValidator(
-	ctx *t_config.Context, 
-	_txStore *transaction.TxIndexIO, 
-	_blockStore *blockStore.BlockStore, 
+	ctx *t_config.Context,
+	_txStore *transaction.TxIndexIO,
+	_blockStore *blockStore.BlockStore,
 	_mempool *mempool.MempoolIO,
-	_utxoStore 	*utxoSet.UtxoStore,
-	) *TxValidator {
+	_utxoStore *utxoSet.UtxoStore,
+) *TxValidator {
 	v := new(TxValidator)
 	v.ctx = ctx
 	v.blockchain = blockchain.NewBlockchain(ctx, _blockStore)
@@ -121,9 +121,9 @@ func (v *TxValidator) assertSigScriptSyntax() bool {
 			}
 			i++
 			sz := binary.BigEndian.Uint32(in.UnlockingScript[i:nSz])
-			i+=nSz
+			i += nSz
 
-			if len(in.UnlockingScript) - i != int(sz) {
+			if len(in.UnlockingScript)-i != int(sz) {
 				return false
 			}
 			i += int(sz)

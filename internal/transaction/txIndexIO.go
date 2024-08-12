@@ -5,9 +5,11 @@ import (
 	"encoding/gob"
 	"math/big"
 	"path"
-	"github.com/terium-project/terium/internal/t_config"
+
+	"github.com/tiereum/trmnode/internal/t_config"
+	"github.com/tiereum/trmnode/internal/t_error"
+
 	"github.com/dgraph-io/badger/v4"
-	"github.com/terium-project/terium/internal/t_error"
 )
 
 type TxMetadata struct {

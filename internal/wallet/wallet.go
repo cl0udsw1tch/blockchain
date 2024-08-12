@@ -5,9 +5,9 @@ import (
 	"os"
 	"path"
 
-	"github.com/terium-project/terium/internal/client"
-	"github.com/terium-project/terium/internal/t_config"
-	"github.com/terium-project/terium/internal/t_error"
+	"github.com/tiereum/trmnode/internal/client"
+	"github.com/tiereum/trmnode/internal/t_config"
+	"github.com/tiereum/trmnode/internal/t_error"
 )
 
 type Wallet struct {

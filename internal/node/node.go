@@ -9,40 +9,40 @@ import (
 	"path"
 	"sync"
 
-	"github.com/terium-project/terium/internal/block"
-	"github.com/terium-project/terium/internal/blockStore"
-	"github.com/terium-project/terium/internal/blockchain"
-	"github.com/terium-project/terium/internal/mempool"
-	"github.com/terium-project/terium/internal/miner"
-	"github.com/terium-project/terium/internal/server"
-	"github.com/terium-project/terium/internal/t_config"
-	"github.com/terium-project/terium/internal/t_error"
-	"github.com/terium-project/terium/internal/transaction"
-	"github.com/terium-project/terium/internal/utxoSet"
-	"github.com/terium-project/terium/internal/validator"
-	"github.com/terium-project/terium/internal/wallet"
+	"github.com/tiereum/trmnode/internal/block"
+	"github.com/tiereum/trmnode/internal/blockStore"
+	"github.com/tiereum/trmnode/internal/blockchain"
+	"github.com/tiereum/trmnode/internal/mempool"
+	"github.com/tiereum/trmnode/internal/miner"
+	"github.com/tiereum/trmnode/internal/server"
+	"github.com/tiereum/trmnode/internal/t_config"
+	"github.com/tiereum/trmnode/internal/t_error"
+	"github.com/tiereum/trmnode/internal/transaction"
+	"github.com/tiereum/trmnode/internal/utxoSet"
+	"github.com/tiereum/trmnode/internal/validator"
+	"github.com/tiereum/trmnode/internal/wallet"
 )
 
 type Node struct {
-	miner *miner.Miner
-	ctx   *t_config.Context
-	server *server.Server
-	txValidator *validator.TxValidator
+	miner          *miner.Miner
+	ctx            *t_config.Context
+	server         *server.Server
+	txValidator    *validator.TxValidator
 	blockValidator *validator.BlockValidator
-	blockchain *blockchain.Blockchain
-	blockStore *blockStore.BlockStore
-	txIndex *transaction.TxIndexIO
-	mempool *mempool.MempoolIO
-	utxoStore *utxoSet.UtxoStore
-	block *block.Block
-	tx *transaction.Tx
+	blockchain     *blockchain.Blockchain
+	blockStore     *blockStore.BlockStore
+	txIndex        *transaction.TxIndexIO
+	mempool        *mempool.MempoolIO
+	utxoStore      *utxoSet.UtxoStore
+	block          *block.Block
+	tx             *transaction.Tx
 }
 
 func NewNode(ctx *t_config.Context, newConf *t_config.Config) *Node {
 
 	node := new(Node)
 	node.ctx = ctx
-	
+
 	if node.ctx.NodeConfig.ClientAddress == nil {
 		if *newConf.ClientAddress == "" {
 			fmt.Println("Enter name for new wallet for node: ")
@@ -70,21 +70,21 @@ func NewNode(ctx *t_config.Context, newConf *t_config.Config) *Node {
 	node.mempool = mempool.NewMempoolIO(node.ctx)
 	node.utxoStore = utxoSet.NewUtxoStore(node.ctx)
 	node.server = server.NewServer(node.ctx)
-	
+
 	node.blockchain = blockchain.NewBlockchain(node.ctx, node.blockStore)
 	node.txValidator = validator.NewTxValidator(
-		node.ctx, 
-		node.txIndex, 
-		node.blockStore, 
-		node.mempool, 
+		node.ctx,
+		node.txIndex,
+		node.blockStore,
+		node.mempool,
 		node.utxoStore)
 	node.blockValidator = validator.NewBlockValidator(
-		ctx, 
-		node.blockchain, 
+		ctx,
+		node.blockchain,
 		node.txValidator)
-	
+
 	node.miner = miner.NewMiner(node.ctx, node.blockchain, node.mempool)
-	
+
 	return node
 }
 
@@ -156,7 +156,7 @@ func (node *Node) ReadTmpTx(hash string) *transaction.Tx {
 	b, err := os.ReadFile(path)
 	t_error.LogErr(err)
 	buffer := new(bytes.Buffer)
-	buffer.Write(b[:len(b) - 32])
+	buffer.Write(b[:len(b)-32])
 	dec := transaction.NewTxDecoder(nil)
 	err = dec.Decode(buffer)
 	t_error.LogErr(err)
@@ -181,17 +181,17 @@ func (node *Node) Run() {
 	node.StartMiner()
 
 	for {
-		select { 
+		select {
 
-		case <-node.miner.Signal.SolveSignal.Ready :
+		case <-node.miner.Signal.SolveSignal.Ready:
 			// node has mined a block and added it to the blockchain
-			node.server.Block().InStream<- node.block
+			node.server.Block().InStream <- node.block
 			node.UpdateUtxoSet()
 			node.UpdateTxIndex()
 			node.AddBlock()
 			node.CreateBlock(make([]byte, 0))
 
-		case tx := <-node.server.Tx().OutStream :
+		case tx := <-node.server.Tx().OutStream:
 			// incoming tx from network
 			node.tx = tx
 			if !node.ValidateTx() {
@@ -200,7 +200,7 @@ func (node *Node) Run() {
 				node.AddTxToPool()
 			}
 
-		case block := <-node.server.Block().OutStream : 
+		case block := <-node.server.Block().OutStream:
 			// incoming block from network
 			if node.ValidateBlock() {
 				node.block = block
@@ -229,13 +229,13 @@ func (node *Node) StartInteractive() {
 
 	for {
 		select {
-		case <-node.miner.Signal.SolveSignal.Ready :
+		case <-node.miner.Signal.SolveSignal.Ready:
 			os.WriteFile(path.Join(node.ctx.TmpDir, "blocks", hex.EncodeToString(node.block.Hash())), node.block.Serialize(), 0666)
 
-		case tx := <-node.server.Tx().OutStream :
+		case tx := <-node.server.Tx().OutStream:
 			os.WriteFile(path.Join(node.ctx.TmpDir, "txs", hex.EncodeToString(tx.Hash())), tx.Serialize(), 0666)
 
-		case block := <-node.server.Block().OutStream : 
+		case block := <-node.server.Block().OutStream:
 			os.WriteFile(path.Join(node.ctx.TmpDir, "blocks", hex.EncodeToString(block.Hash())), block.Serialize(), 0666)
 		}
 	}
@@ -276,6 +276,7 @@ func (node *Node) AddTxToPool() error {
 func (node *Node) ValidateTx() bool {
 	return node.txValidator.ValidateTx(node.tx)
 }
+
 // goroutines
 
 func (node *Node) TxListen() <-chan *transaction.Tx {
@@ -324,9 +325,8 @@ func (node *Node) UpdateTxIndex() {
 	}
 }
 
-
 func (node *Node) Broadcast() {
-	node.server.Block().InStream<- node.block
+	node.server.Block().InStream <- node.block
 }
 
 func (node *Node) Genesis() {

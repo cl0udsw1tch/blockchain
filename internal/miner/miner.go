@@ -6,22 +6,21 @@ import (
 	"fmt"
 	"os"
 	"time"
-
-	"github.com/terium-project/terium/internal/block"
-	"github.com/terium-project/terium/internal/blockchain"
-	"github.com/terium-project/terium/internal/blockchain/proof"
-	"github.com/terium-project/terium/internal/mempool"
-	"github.com/terium-project/terium/internal/t_config"
-	"github.com/terium-project/terium/internal/t_error"
-	"github.com/terium-project/terium/internal/transaction"
+	"github.com/tiereum/trmnode/internal/block"
+	"github.com/tiereum/trmnode/internal/blockchain"
+	"github.com/tiereum/trmnode/internal/blockchain/proof"
+	"github.com/tiereum/trmnode/internal/mempool"
+	"github.com/tiereum/trmnode/internal/t_config"
+	"github.com/tiereum/trmnode/internal/t_error"
+	"github.com/tiereum/trmnode/internal/transaction"
 )
 
 type Miner struct {
-	mempool     *mempool.MempoolIO
-	ctx         *t_config.Context
-	blockchain  *blockchain.Blockchain
-	pow         *proof.PoW
-	Signal      *MinerSignal
+	mempool    *mempool.MempoolIO
+	ctx        *t_config.Context
+	blockchain *blockchain.Blockchain
+	pow        *proof.PoW
+	Signal     *MinerSignal
 }
 
 func NewMiner(ctx *t_config.Context, blockchain *blockchain.Blockchain, mempool *mempool.MempoolIO) *Miner {
@@ -60,15 +59,14 @@ func (miner *Miner) Genesis() *block.Block {
 
 func (miner *Miner) CreateBlock(coinbaseSript []byte) *block.Block {
 
-
 	coinbaseScriptSz := transaction.NewCompactSize(int64(len(coinbaseSript)))
 	coinbaseTx := miner.CoinbaseTx(uint32(t_config.Version), coinbaseScriptSz, coinbaseSript)
 
 	header := block.Header{
-		Version:   t_config.Version,
-		PrevHash:  miner.blockchain.LastMeta().Hash,
-		Target:    t_config.NBits,
-		TimeStamp: uint32(time.Now().Unix()),
+		Version:        t_config.Version,
+		PrevHash:       miner.blockchain.LastMeta().Hash,
+		Target:         t_config.NBits,
+		TimeStamp:      uint32(time.Now().Unix()),
 		MerkleRootHash: make([]byte, 32),
 	}
 
@@ -169,12 +167,12 @@ func (miner *Miner) Mine(quit chan byte, block *block.Block) bool {
 	defer miner.pow.Close()
 	block.Header.TimeStamp = uint32(time.Now().Unix())
 	block.Header.MerkleRootHash = block.MerkelRoot()
-	go func(){
+	go func() {
 		for state := range miner.pow.Notifier {
 			fmt.Printf("\rNonce: %X\tHash: %s\t Solved: %t", state.Nonce, hex.EncodeToString(state.Hash), state.Solved)
 			if state.Solved {
 				var s string
-				for _, n := range(state.Hash) {
+				for _, n := range state.Hash {
 					s += fmt.Sprintf("%08b", n)
 				}
 				fmt.Printf("\n\nBinary:\n%0*s\n", 256, s)
@@ -183,7 +181,6 @@ func (miner *Miner) Mine(quit chan byte, block *block.Block) bool {
 	}()
 	return miner.pow.Solve(block, quit)
 }
-
 
 func (miner *Miner) CoinbaseTx(
 	version uint32,
